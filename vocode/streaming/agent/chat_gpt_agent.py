@@ -206,6 +206,7 @@ class ChatGPTAgent(RespondAgent[ChatGPTAgentConfigType]):
                 vector_db_result = (
                     f"Found {len(docs_with_scores)} similar documents:\n{docs_with_scores_str}"
                 )
+                print("Vector DB results >>>>>>>>>>>>>> ", vector_db_result)
                 messages = format_openai_chat_messages_from_transcript(
                     self.transcript,
                     self.agent_config.model_name,
