@@ -115,7 +115,6 @@ class CartesiaSynthesizer(BaseSynthesizer[CartesiaSynthesizerConfig]):
                 voice_id=self.voice_id,
                 continue_=not is_sole_text_chunk,
                 output_format=self.output_format,
-                _experimental_voice_controls=self._experimental_voice_controls,
             )
 
         async def chunk_generator(context):
