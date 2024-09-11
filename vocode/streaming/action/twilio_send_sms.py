@@ -8,7 +8,6 @@ from vocode.streaming.models.actions import (ActionConfig, ActionInput,
 
 from twilio.rest import Client
 
-from .custom_models import MyActionType
 
 class TwilioSendSmsActionConfig(ActionConfig, type="action_send_sms"):
     pass
