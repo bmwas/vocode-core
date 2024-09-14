@@ -1,126 +1,179 @@
-from typing import Literal, Optional, Type, Union
-import os
+import asyncio
+from typing import Literal, Optional, Type, Union, Tuple
+
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
 
-from vocode.streaming.action.phone_call_action import (
-    TwilioPhoneConversationAction,
-)
+import os
+
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
+from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
-from vocode.streaming.utils.state_manager import (
-    TwilioPhoneConversationStateManager,
-)
+from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
-from twilio.rest import Client
-
-
-class ContactCenterEmptyParameters(BaseModel):
+# Define the parameters
+class SendEmailEmptyParameters(BaseModel):
     pass
 
 
-ContactCenterParameters = ContactCenterEmptyParameters
+class SendEmailRequiredParameters(BaseModel):
+    to_email: str = Field(..., description="The email address to send an email to")
+    subject: str = Field(..., description="The subject of the email")
+    email_body: str = Field(..., description="The body of the email")
 
 
-class ContactCenterResponse(BaseModel):
+SendEmailParameters = Union[SendEmailEmptyParameters, SendEmailRequiredParameters]
+
+# Define the response model
+class SendEmailResponse(BaseModel):
     success: bool
-    phone_number: str
 
-
-class ContactCenterVocodeActionConfig(
-    VocodeActionConfig, type="action_retrieve_phone_number"
+# Define the action configuration
+class SendEmailVocodeActionConfig(
+    VocodeActionConfig, type="action_send_email"
 ):  # type: ignore
+    to_email: Optional[str] = Field(
+        None, description="The email address to send an email to"
+    )
+    subject: Optional[str] = Field(
+        None, description="Subject of the email to be sent."
+    )
+    email_body: Optional[str] = Field(
+        None, description="Body of the email to be sent."
+    )
+
+    def get_email_details(self, input: ActionInput) -> Tuple[str, str, str]:
+        if isinstance(input.params, SendEmailRequiredParameters):
+            logger.debug("Using email details from input parameters.")
+            return (
+                input.params.to_email,
+                input.params.subject,
+                input.params.email_body,
+            )
+        elif isinstance(input.params, SendEmailEmptyParameters):
+            logger.debug("Using email details from action configuration.")
+            if not (self.to_email and self.subject and self.email_body):
+                logger.error("Email details must be set in the action configuration.")
+                raise ValueError("Email details must be set in the action configuration.")
+            return self.to_email, self.subject, self.email_body
+        else:
+            logger.error("Invalid input params type.")
+            raise TypeError("Invalid input params type")
+
     def action_attempt_to_string(self, input: ActionInput) -> str:
-        return "Attempting to retrieve caller's phone number"
+        to_email = (
+            self.to_email
+            if isinstance(input.params, SendEmailEmptyParameters)
+            else input.params.to_email
+        )
+        return f"Attempting to send email to {to_email}"
 
     def action_result_to_string(
         self, input: ActionInput, output: ActionOutput
     ) -> str:
-        assert isinstance(output.response, ContactCenterResponse)
-        if output.response.phone_number != "EMPTY":
-            action_description = (
-                f"Successfully retrieved phone number: {output.response.phone_number}"
-            )
+        if output.response.success:
+            return "Email sent successfully."
         else:
-            action_description = "Could not retrieve phone number"
-        return action_description
+            return "Failed to send email."
 
-
-FUNCTION_DESCRIPTION = "Retrieves the phone number of the caller using Twilio's API."
+# Constants
+FUNCTION_DESCRIPTION = "Sends an email during an ongoing call."
 QUIET = True
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
 
-
-class TwilioContactCenter(
+# Define the action class
+class TwilioSendEmail(
     TwilioPhoneConversationAction[
-        ContactCenterVocodeActionConfig,
-        ContactCenterParameters,
-        ContactCenterResponse,
+        SendEmailVocodeActionConfig, SendEmailParameters, SendEmailResponse
     ]
 ):
     description: str = FUNCTION_DESCRIPTION
-    response_type: Type[ContactCenterResponse] = ContactCenterResponse
+    response_type: Type[SendEmailResponse] = SendEmailResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
-    def parameters_type(self) -> Type[ContactCenterParameters]:
-        return ContactCenterEmptyParameters
+    def parameters_type(self) -> Type[SendEmailParameters]:
+        if (
+            self.action_config.to_email
+            and self.action_config.subject
+            and self.action_config.email_body
+        ):
+            logger.debug("No input parameters required; using SendEmailEmptyParameters.")
+            return SendEmailEmptyParameters
+        else:
+            logger.debug("Input parameters required; using SendEmailRequiredParameters.")
+            return SendEmailRequiredParameters
 
     def __init__(
         self,
-        action_config: ContactCenterVocodeActionConfig,
+        action_config: SendEmailVocodeActionConfig,
     ):
         super().__init__(
             action_config,
             quiet=QUIET,
-            is_interruptible=IS_INTERRUPTIBLE,
+            is_interruptible=IS_INTERRUPTIBLE,  # Use the constant for consistency
             should_respond=SHOULD_RESPOND,
         )
 
-    async def get_call_phone_number(self, twilio_call_sid: str):
-        logger.debug(f"Fetching phone number for Call SID: {twilio_call_sid}")
-        # Initialize the Twilio client
-        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-
-        if not account_sid or not auth_token:
+    def send_email(self, to_email: str, subject: str, email_body: str):
+        logger.debug("Preparing to send email.")
+        sendgrid_api_key = os.environ.get("SENDGRID_API_KEY")
+        from_email = os.environ.get("SENDGRID_FROM_EMAIL")
+        if not sendgrid_api_key or not from_email:
             logger.error(
-                "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables must be set"
+                "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL must be set in environment variables."
             )
             return None
-
-        client = Client(account_sid, auth_token)
+        message = Mail(
+            from_email=from_email,
+            to_emails=to_email,
+            subject=subject,
+            html_content=email_body,
+        )
         try:
-            # Fetch the call details using the Call SID
-            call = client.calls(twilio_call_sid).fetch()
-            logger.debug(f"Call details retrieved: {call}")
-            # Return the 'from' number (caller's number)
-            return call.from_
+            sg = SendGridAPIClient(sendgrid_api_key)
+            response = sg.send(message)
+            logger.info(f"Email sent with status code: {response.status_code}")
+            return response
         except Exception as e:
-            logger.error(f"Error retrieving phone number: {str(e)}")
+            logger.error(f"Exception occurred while sending email: {str(e)}")
             return None
 
     async def run(
-        self, action_input: ActionInput[ContactCenterParameters]
-    ) -> ActionOutput[ContactCenterResponse]:
-        twilio_call_sid = self.get_twilio_sid(action_input)
-        logger.debug(f"Retrieved Twilio Call SID: {twilio_call_sid}")
+        self, action_input: ActionInput[SendEmailParameters]
+    ) -> ActionOutput[SendEmailResponse]:
+        logger.debug("Starting the email send action.")
+        to_email, subject, email_body = self.action_config.get_email_details(
+            action_input
+        )
+        logger.debug(f"Email details retrieved - To: {to_email}, Subject: {subject}")
 
         if action_input.user_message_tracker is not None:
+            logger.debug("Waiting for user message tracker to finish.")
             await action_input.user_message_tracker.wait()
+            logger.debug("User message tracker has finished.")
 
-        logger.info(
-            "Finished waiting for user message tracker, now attempting to retrieve caller's phone number"
-        )
+        try:
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None, self.send_email, to_email, subject, email_body
+            )
+            if response and response.status_code == 202:  # SendGrid returns 202 on success
+                success = True
+                logger.info("Email sent successfully.")
+            else:
+                success = False
+                logger.error("Failed to send email.")
+        except Exception as e:
+            logger.error(f"Error sending email: {str(e)}")
+            success = False
 
-        phone_number = await self.get_call_phone_number(twilio_call_sid)
-        logger.debug(f"Retrieved phone number: {phone_number}")
-
-        if not phone_number:
-            phone_number = "EMPTY"
-
+        logger.debug("Email send action completed.")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=ContactCenterResponse(success=True, phone_number=phone_number),
+            response=SendEmailResponse(success=success),
         )
