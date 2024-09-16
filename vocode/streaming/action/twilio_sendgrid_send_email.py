@@ -1,3 +1,7 @@
+"""
+Sends an email to a caller using the Twilio Sendgrid API. 
+Must have recipient's Email Address, Subject and Email body.
+"""
 import os
 from typing import Literal, Optional, Type, Union, Tuple, get_args
 
