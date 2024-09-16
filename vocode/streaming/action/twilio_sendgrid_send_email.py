@@ -13,7 +13,7 @@ from vocode.streaming.action.base_action import BaseAction
 from vocode.streaming.models.actions import ActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
 
-class SendEmailVocodeActionConfig(ActionConfig, type="sendgrid_send_email"):  # type: ignore
+class SendEmailVocodeActionConfig(ActionConfig, type="action_send_email"):  # type: ignore
     pass
 
 class SendEmailParameters(BaseModel):
