@@ -1,7 +1,5 @@
-import asyncio
 import os
-import re
-from typing import Literal, Optional, Type
+from typing import Literal, Optional, Type, Union, Tuple, get_args
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -9,46 +7,85 @@ from pydantic.v1 import BaseModel, Field
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
-from vocode.streaming.action.base_action import BaseAction
-from vocode.streaming.models.actions import ActionConfig
+from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
+from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
+from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 
-class SendEmailParameters(BaseModel):
-    to_email: str = Field(..., description="The email address to send an email to.")
-    subject: str = Field(..., description="The subject of the email.")
-    email_body: str = Field(..., description="The body of the email.")
+class SendEmailEmptyParameters(BaseModel):
+    pass
+
+
+class SendEmailRequiredParameters(BaseModel):
+    to_email: str = Field(..., description="The email address to send the email to")
+    subject: str = Field(..., description="The subject of the email")
+    email_body: str = Field(..., description="The body of the email")
+
+
+SendEmailParameters = Union[SendEmailEmptyParameters, SendEmailRequiredParameters]
 
 
 class SendEmailResponse(BaseModel):
     success: bool
-    message: Optional[str] = None
 
 
-class SendEmailVocodeActionConfig(ActionConfig, type="action_send_email"):  # type: ignore
-    # If you have any default configuration parameters, define them here
-    pass
+class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):  # type: ignore
+    to_email: Optional[str] = Field(
+        None, description="The email address to send the email to"
+    )
+    subject: Optional[str] = Field(
+        None, description="The subject of the email"
+    )
+    email_body: Optional[str] = Field(
+        None, description="The body of the email"
+    )
+
+    def get_email_details(self, input: ActionInput) -> Tuple[str, str, str]:
+        if isinstance(input.params, SendEmailRequiredParameters):
+            return (
+                input.params.to_email,
+                input.params.subject,
+                input.params.email_body,
+            )
+        elif isinstance(input.params, SendEmailEmptyParameters):
+            assert self.to_email and self.subject and self.email_body, "Email details must be set"
+            return self.to_email, self.subject, self.email_body
+        else:
+            raise TypeError("Invalid input params type")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
-        return f"Attempting to send email to {input.params.to_email}"
+        to_email, _, _ = self.get_email_details(input)
+        return f"Attempting to send email to {to_email}"
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
         if output.response.success:
-            return "Email sent successfully."
+            return "Successfully sent email"
         else:
-            return f"Failed to send email: {output.response.message or 'Unknown error'}"
+            return "Failed to send email"
 
 
-class SendEmail(
-    BaseAction[
-        SendEmailVocodeActionConfig,
-        SendEmailParameters,
-        SendEmailResponse,
+FUNCTION_DESCRIPTION = "Sends an email using SendGrid. This is never used while on hold."
+QUIET = True
+IS_INTERRUPTIBLE = True
+SHOULD_RESPOND: Literal["always"] = "always"
+
+
+class TwilioSendEmail(
+    TwilioPhoneConversationAction[
+        SendEmailVocodeActionConfig, SendEmailParameters, SendEmailResponse
     ]
 ):
-    description: str = "Sends an email to a specified email address."
-    parameters_type: Type[SendEmailParameters] = SendEmailParameters
+    description: str = FUNCTION_DESCRIPTION
     response_type: Type[SendEmailResponse] = SendEmailResponse
+    conversation_state_manager: TwilioPhoneConversationStateManager
+
+    @property
+    def parameters_type(self) -> Type[SendEmailParameters]:
+        if self.action_config.to_email and self.action_config.subject and self.action_config.email_body:
+            return SendEmailEmptyParameters
+        else:
+            return SendEmailRequiredParameters
 
     def __init__(
         self,
@@ -56,16 +93,12 @@ class SendEmail(
     ):
         super().__init__(
             action_config,
-            quiet=True,
-            should_respond="always",
+            quiet=QUIET,
+            is_interruptible=False,
+            should_respond=SHOULD_RESPOND,
         )
 
-    def _validate_email(self, email: str) -> bool:
-        # Simple email validation regex
-        EMAIL_REGEX = r"^(?!\.)(?!.*\.\.)[a-zA-Z0-9._%+-]+(?<!\.)@(?![.])[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        return bool(re.match(EMAIL_REGEX, email))
-
-    def send_email(self, to_email: str, subject: str, email_body: str) -> bool:
+    async def send_email(self, to_email: str, subject: str, email_body: str) -> bool:
         logger.debug("Preparing to send email.")
         sendgrid_api_key = os.environ.get("SENDGRID_API_KEY")
         from_email = os.environ.get("SENDGRID_FROM_EMAIL")
@@ -73,10 +106,6 @@ class SendEmail(
             logger.error(
                 "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL must be set in environment variables."
             )
-            return False
-
-        if not self._validate_email(to_email):
-            logger.error("Invalid recipient email address.")
             return False
 
         message = Mail(
@@ -97,37 +126,22 @@ class SendEmail(
     async def run(
         self, action_input: ActionInput[SendEmailParameters]
     ) -> ActionOutput[SendEmailResponse]:
-        logger.debug("Starting the email send action.")
-
-        to_email = action_input.params.to_email
-        subject = action_input.params.subject
-        email_body = action_input.params.email_body
-
-        logger.debug(f"Email details - To: {to_email}, Subject: {subject}")
-
         if action_input.user_message_tracker is not None:
-            logger.debug("Waiting for user message tracker to finish.")
             await action_input.user_message_tracker.wait()
-            logger.debug("User message tracker has finished.")
+
+        logger.info("Finished waiting for user message tracker, now attempting to send email")
 
         if self.conversation_state_manager.transcript.was_last_message_interrupted():
-            logger.info("Last bot message was interrupted, not sending email.")
+            logger.info("Last bot message was interrupted, not sending email")
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=SendEmailResponse(success=False, message="User interrupted."),
+                response=SendEmailResponse(success=False),
             )
 
-        loop = asyncio.get_event_loop()
-        success = await loop.run_in_executor(
-            None, self.send_email, to_email, subject, email_body
-        )
+        to_email, subject, email_body = self.action_config.get_email_details(action_input)
 
-        if success:
-            logger.info("Email sent successfully.")
-        else:
-            logger.error("Failed to send email.")
+        success = await self.send_email(to_email, subject, email_body)
 
-        logger.debug("Email send action completed.")
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=SendEmailResponse(success=success),
