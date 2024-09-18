@@ -30,7 +30,7 @@ class SendEmailVocodeActionConfig(
 ):
     pass
 
-class TwilioSendEmail(
+class SendEmailAction(
         BaseAction[
             SendEmailVocodeActionConfig,
             SendEmailParameters,
