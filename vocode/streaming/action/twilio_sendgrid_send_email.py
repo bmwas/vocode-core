@@ -1,9 +1,5 @@
-"""
-Sends an email to a caller using the Twilio Sendgrid API. 
-Must have recipient's Email Address, Subject and Email body.
-"""
 import os
-from typing import Literal, Optional, Type, Union, Tuple, get_args
+from typing import Literal, Optional, Type, Union, Tuple
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -70,7 +66,7 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
 
 
 FUNCTION_DESCRIPTION = "Sends an email using SendGrid. This is never used while on hold."
-QUIET = True
+QUIET = False  # Set to False to ensure the action sends a response
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
 
