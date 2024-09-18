@@ -1,45 +1,43 @@
 import os
-from typing import Literal, Type
+from typing import Optional, Type
 
-from loguru import logger
-from pydantic.v1 import BaseModel, Field
+from pydantic import Field
+from pydantic.v1 import BaseModel
 
-from sendgrid import SendGridAPIClient
+from sendgrid import SendGridAPIClient  # SendGrid imports
 from sendgrid.helpers.mail import Mail
+
+from loguru import logger  # For logging
 
 from vocode.streaming.action.base_action import BaseAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
 
+_SENDGRID_ACTION_DESCRIPTION = """Sends an email using SendGrid API.
+The input to this action is the recipient email, email body, and optional subject.
+"""
 
 class SendEmailParameters(BaseModel):
-    to_email: str = Field(..., description="The email address to send the email to")
-    subject: str = Field(..., description="The subject of the email")
-    email_body: str = Field(..., description="The body of the email")
-
+    to_email: str = Field(..., description="The email address to send the email to.")
+    subject: Optional[str] = Field(None, description="The subject of the email.")
+    email_body: str = Field(..., description="The body of the email.")
 
 class SendEmailResponse(BaseModel):
     success: bool
 
-
 class SendEmailVocodeActionConfig(
     VocodeActionConfig, type="action_send_email"  # type: ignore
 ):
-    pass  # No default parameters; parameters must be passed every time
+    pass
 
-
-FUNCTION_DESCRIPTION = "Sends an email using SendGrid. This is never used while on hold."
-QUIET = False  # Set to False to ensure the action sends a response
-IS_INTERRUPTIBLE = True
-SHOULD_RESPOND: Literal["always"] = "always"
-
-
-class SendEmailAction(
-    BaseAction[
-        SendEmailVocodeActionConfig, SendEmailParameters, SendEmailResponse
-    ]
-):
-    description: str = FUNCTION_DESCRIPTION
+class TwilioSendEmail(
+        BaseAction[
+            SendEmailVocodeActionConfig,
+            SendEmailParameters,
+            SendEmailResponse,
+        ]
+    ):
+    description: str = _SENDGRID_ACTION_DESCRIPTION
     parameters_type: Type[SendEmailParameters] = SendEmailParameters
     response_type: Type[SendEmailResponse] = SendEmailResponse
 
@@ -49,44 +47,36 @@ class SendEmailAction(
     ):
         super().__init__(
             action_config,
-            quiet=QUIET,
-            is_interruptible=False,
-            should_respond=SHOULD_RESPOND,
+            quiet=False,  # Set to False to ensure the action sends a response
+            is_interruptible=True,
         )
+
+    async def _end_of_run_hook(self) -> None:
+        """This method is called at the end of the run method. It is optional but intended to be
+        overridden if needed."""
+        print("Successfully sent email!")
 
     async def run(
         self, action_input: ActionInput[SendEmailParameters]
     ) -> ActionOutput[SendEmailResponse]:
-        logger.info("Attempting to send email")
-
-        # Use parameters directly from the input
-        to_email = action_input.params.to_email
-        subject = action_input.params.subject
+        # Extract parameters
+        to_email = action_input.params.to_email.strip()
+        subject = (
+            action_input.params.subject.strip() if action_input.params.subject else "Email from Vocode"
+        )
         email_body = action_input.params.email_body
 
-        logger.debug(f"Received parameters - to_email: {to_email}, subject: {subject}, email_body length: {len(email_body)}")
-
-        success = await self.send_email(to_email, subject, email_body)
-
-        if success:
-            logger.info("Successfully sent email")
-        else:
-            logger.error("Failed to send email")
-
-        return ActionOutput(
-            action_type=action_input.action_config.type,
-            response=SendEmailResponse(success=success),
-        )
-
-    async def send_email(self, to_email: str, subject: str, email_body: str) -> bool:
-        logger.debug("Preparing to send email.")
+        # Prepare SendGrid client
         sendgrid_api_key = os.environ.get("SENDGRID_API_KEY")
         from_email = os.environ.get("SENDGRID_FROM_EMAIL")
         if not sendgrid_api_key or not from_email:
             logger.error(
                 "SENDGRID_API_KEY and SENDGRID_FROM_EMAIL must be set in environment variables."
             )
-            return False
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=SendEmailResponse(success=False),
+            )
 
         message = Mail(
             from_email=from_email,
@@ -98,16 +88,17 @@ class SendEmailAction(
             sg = SendGridAPIClient(sendgrid_api_key)
             response = sg.send(message)
             logger.info(f"Email sent with status code: {response.status_code}")
-            return response.status_code == 202  # SendGrid returns 202 on success
+            success = response.status_code == 202  # SendGrid returns 202 on success
         except Exception as e:
             logger.error(f"Exception occurred while sending email: {str(e)}")
-            return False
+            success = False
 
-    def action_attempt_to_string(self, input: ActionInput[SendEmailParameters]) -> str:
-        return f"Attempting to send email to {input.params.to_email}"
-
-    def action_result_to_string(self, input: ActionInput[SendEmailParameters], output: ActionOutput[SendEmailResponse]) -> str:
-        if output.response.success:
-            return "Successfully sent email"
+        if success:
+            await self._end_of_run_hook()
         else:
-            return "Failed to send email"
+            logger.error("Failed to send email")
+
+        return ActionOutput(
+            action_type=action_input.action_config.type,
+            response=SendEmailResponse(success=success),
+        )
