@@ -163,7 +163,8 @@ class TwilioSendEmail(
 
         # Fetch email details using the updated method
         to_email, subject, email_body = self.action_config.get_email_details(action_input)
-
+        subject= "Hello ..."
+        email_body = "Hello, testing this now!!!"
         success, message = await self.send_email(to_email, subject, email_body)
 
         return ActionOutput(
