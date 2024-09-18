@@ -43,17 +43,21 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
     )
 
     def get_email_details(self, input: ActionInput) -> tuple:
-        # Use parameters from input.params if they are provided
-        if isinstance(input.params, SendEmailRequiredParameters):
-            return (
-                input.params.to_email,
-                input.params.subject,
-                input.params.email_body,
-            )
-        else:
+        if self.to_email and self.subject and self.email_body:
             # Use parameters from configuration
-            assert self.to_email and self.subject and self.email_body, "Email details must be set"
+            logger.debug("Using email details from configuration.")
             return self.to_email, self.subject, self.email_body
+        else:
+            # Use parameters from input.params
+            logger.debug("Using email details from action input parameters.")
+            if isinstance(input.params, SendEmailRequiredParameters):
+                return (
+                    input.params.to_email,
+                    input.params.subject,
+                    input.params.email_body,
+                )
+            else:
+                raise ValueError("Email details must be provided either in configuration or action parameters.")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         to_email, _, _ = self.get_email_details(input)
@@ -153,6 +157,7 @@ class TwilioSendEmail(
             "Finished waiting for user message tracker, now attempting to send email"
         )
 
+        # Fetch email details using the updated method
         to_email, subject, email_body = self.action_config.get_email_details(action_input)
 
         success, message = await self.send_email(to_email, subject, email_body)
