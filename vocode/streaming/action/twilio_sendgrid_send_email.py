@@ -39,7 +39,11 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
     )
 
     def get_email_details(self, input: ActionInput) -> tuple:
-        if self.to_email and self.subject and self.email_body:
+        if (
+            self.to_email
+            and self.subject
+            and self.email_body
+        ):
             # Use parameters from configuration
             logger.debug("Using email details from configuration.")
             return self.to_email, self.subject, self.email_body
@@ -82,7 +86,7 @@ class TwilioSendEmail(
         SendEmailVocodeActionConfig, SendEmailParameters, SendEmailResponse
     ]
 ):
-    description: str = FUNCTION_DESCRIPTION
+    description: str
     response_type: Type[SendEmailResponse] = SendEmailResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
@@ -117,6 +121,17 @@ class TwilioSendEmail(
             is_interruptible=IS_INTERRUPTIBLE,
             should_respond=SHOULD_RESPOND,
         )
+        # Adjust the function description based on whether configuration parameters are provided
+        if (
+            self.action_config.to_email
+            and self.action_config.subject
+            and self.action_config.email_body
+        ):
+            # Configuration parameters are provided
+            self.description = "Sends an email during an ongoing call using SendGrid API."
+        else:
+            # Configuration parameters are not provided
+            self.description = FUNCTION_DESCRIPTION
 
     async def send_email(self, to_email: str, subject: str, email_body: str) -> tuple:
         logger.debug("Preparing to send email.")
@@ -163,8 +178,10 @@ class TwilioSendEmail(
 
         # Fetch email details using the updated method
         to_email, subject, email_body = self.action_config.get_email_details(action_input)
-        subject= "Hello ..."
-        email_body = "Hello, testing this now!!!"
+
+        # Log the email details for debugging
+        logger.debug(f"Email details - To: {to_email}, Subject: {subject}, Body: {email_body}")
+
         success, message = await self.send_email(to_email, subject, email_body)
 
         return ActionOutput(
