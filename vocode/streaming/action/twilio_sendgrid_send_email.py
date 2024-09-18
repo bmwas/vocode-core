@@ -1,5 +1,9 @@
+"""
+Sends an email to a caller using the Twilio SendGrid API.
+Must have recipient's Email Address, Subject, and Email body.
+"""
 import os
-from typing import Literal, Optional, Type, Union
+from typing import Literal, Optional, Type, Union, get_args
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -13,13 +17,17 @@ from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 
+class SendEmailEmptyParameters(BaseModel):
+    pass
+
+
 class SendEmailRequiredParameters(BaseModel):
     to_email: str = Field(..., description="The email address to send the email to")
     subject: str = Field(..., description="The subject of the email")
     email_body: str = Field(..., description="The body of the email")
 
 
-SendEmailParameters = SendEmailRequiredParameters
+SendEmailParameters = Union[SendEmailEmptyParameters, SendEmailRequiredParameters]
 
 
 class SendEmailResponse(BaseModel):
@@ -39,25 +47,17 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
     )
 
     def get_email_details(self, input: ActionInput) -> tuple:
-        if (
-            self.to_email
-            and self.subject
-            and self.email_body
-        ):
-            # Use parameters from configuration
-            logger.debug("Using email details from configuration.")
+        if isinstance(input.params, SendEmailRequiredParameters):
+            return (
+                input.params.to_email,
+                input.params.subject,
+                input.params.email_body,
+            )
+        elif isinstance(input.params, SendEmailEmptyParameters):
+            assert self.to_email and self.subject and self.email_body, "Email details must be set"
             return self.to_email, self.subject, self.email_body
         else:
-            # Use parameters from input.params
-            logger.debug("Using email details from action input parameters.")
-            if isinstance(input.params, SendEmailRequiredParameters):
-                return (
-                    input.params.to_email,
-                    input.params.subject,
-                    input.params.email_body,
-                )
-            else:
-                raise ValueError("Email details must be provided either in configuration or action parameters.")
+            raise TypeError("Invalid input params type")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         to_email, _, _ = self.get_email_details(input)
@@ -72,10 +72,9 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
 
 FUNCTION_DESCRIPTION = """
 Sends an email during an ongoing call using SendGrid API.
-If the recipient's email address, email subject, and email body are provided in the configuration, they will be used.
-Otherwise, the email address, email subject, and email body must be provided as parameters during the action call.
+The input to this action is the recipient's email address, email body, and subject.
+The email address, email subject, and email body are all required parameters.
 """
-
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
@@ -86,30 +85,16 @@ class TwilioSendEmail(
         SendEmailVocodeActionConfig, SendEmailParameters, SendEmailResponse
     ]
 ):
-    description: str
+    description: str = FUNCTION_DESCRIPTION
     response_type: Type[SendEmailResponse] = SendEmailResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
-    def parameters_type(self) -> Optional[Type[SendEmailParameters]]:
-        if (
-            self.action_config.to_email
-            and self.action_config.subject
-            and self.action_config.email_body
-        ):
-            # No parameters needed during action call
-            return None  # Indicating no parameters are required
+    def parameters_type(self) -> Type[SendEmailParameters]:
+        if self.action_config.to_email and self.action_config.subject and self.action_config.email_body:
+            return SendEmailEmptyParameters
         else:
-            # Parameters are required during action call
             return SendEmailRequiredParameters
-
-    def include_parameters_in_prompt(self) -> bool:
-        # If parameters are provided in configuration, do not include them in the LLM prompt
-        return not (
-            self.action_config.to_email
-            and self.action_config.subject
-            and self.action_config.email_body
-        )
 
     def __init__(
         self,
@@ -121,17 +106,6 @@ class TwilioSendEmail(
             is_interruptible=IS_INTERRUPTIBLE,
             should_respond=SHOULD_RESPOND,
         )
-        # Adjust the function description based on whether configuration parameters are provided
-        if (
-            self.action_config.to_email
-            and self.action_config.subject
-            and self.action_config.email_body
-        ):
-            # Configuration parameters are provided
-            self.description = "Sends an email during an ongoing call using SendGrid API."
-        else:
-            # Configuration parameters are not provided
-            self.description = FUNCTION_DESCRIPTION
 
     async def send_email(self, to_email: str, subject: str, email_body: str) -> tuple:
         logger.debug("Preparing to send email.")
@@ -176,11 +150,17 @@ class TwilioSendEmail(
             "Finished waiting for user message tracker, now attempting to send email"
         )
 
-        # Fetch email details using the updated method
-        to_email, subject, email_body = self.action_config.get_email_details(action_input)
+        if self.conversation_state_manager.transcript.was_last_message_interrupted():
+            logger.info("Last bot message was interrupted, not sending email")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=SendEmailResponse(
+                    success=False,
+                    message="Email sending was aborted due to interruption."
+                ),
+            )
 
-        # Log the email details for debugging
-        logger.debug(f"Email details - To: {to_email}, Subject: {subject}, Body: {email_body}")
+        to_email, subject, email_body = self.action_config.get_email_details(action_input)
 
         success, message = await self.send_email(to_email, subject, email_body)
 
