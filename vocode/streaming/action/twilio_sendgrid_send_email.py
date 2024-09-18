@@ -13,13 +13,17 @@ from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 
+class SendEmailEmptyParameters(BaseModel):
+    pass
+
+
 class SendEmailRequiredParameters(BaseModel):
     to_email: str = Field(..., description="The email address to send the email to")
     subject: str = Field(..., description="The subject of the email")
     email_body: str = Field(..., description="The body of the email")
 
 
-SendEmailParameters = SendEmailRequiredParameters
+SendEmailParameters = Union[SendEmailEmptyParameters, SendEmailRequiredParameters]
 
 
 class SendEmailResponse(BaseModel):
@@ -39,12 +43,17 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
     )
 
     def get_email_details(self, input: ActionInput) -> tuple:
-        # Use the parameters passed during the action call
-        return (
-            input.params.to_email,
-            input.params.subject,
-            input.params.email_body,
-        )
+        # Use parameters from input.params if they are provided
+        if isinstance(input.params, SendEmailRequiredParameters):
+            return (
+                input.params.to_email,
+                input.params.subject,
+                input.params.email_body,
+            )
+        else:
+            # Use parameters from configuration
+            assert self.to_email and self.subject and self.email_body, "Email details must be set"
+            return self.to_email, self.subject, self.email_body
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         to_email, _, _ = self.get_email_details(input)
@@ -79,7 +88,16 @@ class TwilioSendEmail(
 
     @property
     def parameters_type(self) -> Type[SendEmailParameters]:
-        return SendEmailRequiredParameters
+        if (
+            self.action_config.to_email
+            and self.action_config.subject
+            and self.action_config.email_body
+        ):
+            # No parameters needed during action call
+            return SendEmailEmptyParameters
+        else:
+            # Parameters are required during action call
+            return SendEmailRequiredParameters
 
     def __init__(
         self,
