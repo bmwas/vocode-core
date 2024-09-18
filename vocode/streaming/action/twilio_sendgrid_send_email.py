@@ -1,13 +1,12 @@
 import os
 from typing import Optional, Type
 
-from pydantic import Field
-from pydantic.v1 import BaseModel
+from pydantic.v1 import BaseModel, Field  # Importing both from pydantic.v1
 
-from sendgrid import SendGridAPIClient  # SendGrid imports
+from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
-from loguru import logger  # For logging
+from loguru import logger
 
 from vocode.streaming.action.base_action import BaseAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
