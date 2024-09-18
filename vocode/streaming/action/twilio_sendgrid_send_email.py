@@ -68,9 +68,12 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
         else:
             return "Failed to send email"
 
-
-FUNCTION_DESCRIPTION = "Sends an email using SendGrid. This is never used while on hold."
-QUIET = True
+FUNCTION_DESCRIPTION = """ 
+Sends an email during an ongoing call using sendgrid API.
+The input to this action is the recipient's email address, email body and subject
+The email address, email subject and email body are all required parameters.
+"""
+QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
 
