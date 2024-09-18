@@ -13,17 +13,13 @@ from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 
-class SendEmailEmptyParameters(BaseModel):
-    pass
-
-
 class SendEmailRequiredParameters(BaseModel):
     to_email: str = Field(..., description="The email address to send the email to")
     subject: str = Field(..., description="The subject of the email")
     email_body: str = Field(..., description="The body of the email")
 
 
-SendEmailParameters = Union[SendEmailEmptyParameters, SendEmailRequiredParameters]
+SendEmailParameters = SendEmailRequiredParameters
 
 
 class SendEmailResponse(BaseModel):
@@ -72,10 +68,10 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
 
 FUNCTION_DESCRIPTION = """
 Sends an email during an ongoing call using SendGrid API.
-The input to this action is the recipient's email address, email body, and subject.
-The email address, email subject, and email body are all required parameters.
-MUST use the parameters that were passed.
+If the recipient's email address, email subject, and email body are provided in the configuration, they will be used.
+Otherwise, the email address, email subject, and email body must be provided as parameters during the action call.
 """
+
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
@@ -91,17 +87,25 @@ class TwilioSendEmail(
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
-    def parameters_type(self) -> Type[SendEmailParameters]:
+    def parameters_type(self) -> Optional[Type[SendEmailParameters]]:
         if (
             self.action_config.to_email
             and self.action_config.subject
             and self.action_config.email_body
         ):
             # No parameters needed during action call
-            return SendEmailEmptyParameters
+            return None  # Indicating no parameters are required
         else:
             # Parameters are required during action call
             return SendEmailRequiredParameters
+
+    def include_parameters_in_prompt(self) -> bool:
+        # If parameters are provided in configuration, do not include them in the LLM prompt
+        return not (
+            self.action_config.to_email
+            and self.action_config.subject
+            and self.action_config.email_body
+        )
 
     def __init__(
         self,
