@@ -68,7 +68,7 @@ class GetPhoneAndQueryContactCenterAction(
                     raise Exception("Failed to get call details")
                 else:
                     call_details = await response.json()
-
+        print ("Call Details >>>>>>>>>>>>>>>>", call_details)
         phone_number = call_details['from']  # Adjust if you need the 'to' number
         server_url = os.environ.get("PORTAL_URL")
         headers = {
