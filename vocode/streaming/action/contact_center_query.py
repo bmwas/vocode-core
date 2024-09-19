@@ -33,7 +33,10 @@ class GetPhoneAndQueryContactCenterAction(
         GetPhoneAndQueryContactCenterActionConfig, EmptyParameters, QueryContactCenterResponse
     ]
 ):
-    description: str = "Gets the phone number associated with the call and queries the contact center."
+    description: str = """Fetches the caller's name, phone number, and email from the contact center at 
+                          the start of the call or as needed. Returns the information or "EMPTY" 
+                          if the caller is not found."""
+
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
@@ -68,7 +71,6 @@ class GetPhoneAndQueryContactCenterAction(
                     raise Exception("Failed to get call details")
                 else:
                     call_details = await response.json()
-        print ("Call Details >>>>>>>>>>>>>>>>", call_details)
         phone_number = call_details['from']  # Adjust if you need the 'to' number
         server_url = os.environ.get("PORTAL_URL")
         headers = {
