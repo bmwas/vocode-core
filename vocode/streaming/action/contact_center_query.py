@@ -33,9 +33,8 @@ class GetPhoneAndQueryContactCenterAction(
         GetPhoneAndQueryContactCenterActionConfig, EmptyParameters, QueryContactCenterResponse
     ]
 ):
-    description: str = """Fetches the caller's name, phone number, and email from the contact center at 
-                          the start of the call or as needed. Returns the information or "EMPTY" 
-                          if the caller is not found."""
+    description: str = """Fetches the name of the provider or caller their phone number, and email addresses from
+                        database or file or contact center"""
 
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
