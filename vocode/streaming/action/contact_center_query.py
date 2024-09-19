@@ -69,7 +69,6 @@ class GetPhoneAndQueryContactCenterAction(
                     raise Exception("Failed to get call details")
                 else:
                     call_details = await response.json()
-        print("Call Details >>>>>>>>>>", call_details)
         phone_number = call_details['from']  # Adjust if you need the 'to' number
         server_url = os.environ.get("PORTAL_URL")
         headers = {
@@ -110,7 +109,7 @@ async def query_contact_center(server_url, headers, phone):
             else:
                 r_search_json = await r_search.json()
                 contact = r_search_json.get('contact', {})
-                print("Contact Info >>>>>>>>>>", contact)
+                
                 contact_info = {
                     "provider name": contact.get('name', ''),
                     "provider phone number": phone,
@@ -122,5 +121,6 @@ async def query_contact_center(server_url, headers, phone):
                     "provider name": "EMPTY",
                     "provider phone number": "EMPTY",
                     "provider email addresses": "EMPTY"
-                    }                       
+                    }       
+        print("Contact Info >>>>>>>>>>", contact_info)                  
     return contact_info
