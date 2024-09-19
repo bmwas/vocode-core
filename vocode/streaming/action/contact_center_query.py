@@ -103,23 +103,23 @@ async def query_contact_center(server_url, headers, phone):
             if r_search.status != 200:
                 logger.error(f"Failed to search contact: {r_search.status} {r_search.reason}")
                 contact_info = {
-                    "caller name": "EMPTY",
-                    "caller phone number": "EMPTY",
-                    "caller email addresses": "EMPTY"
+                    "provider name": "EMPTY",
+                    "provider phone number": "EMPTY",
+                    "provider email addresses": "EMPTY"
                     }               
             else:
                 r_search_json = await r_search.json()
                 contact = r_search_json.get('contact', {})
                 contact_info = {
-                    "caller name": contact.get('name', ''),
-                    "caller phone number": phone,
-                    "caller email addresses": contact.get('visitorEmails', [])
+                    "provider name": contact.get('name', ''),
+                    "provider phone number": phone,
+                    "provider email addresses": contact.get('visitorEmails', [])
                     }
                 if not contact:
                     logger.error("Contact not found")
                     contact_info = {
-                    "caller name": "EMPTY",
-                    "caller phone number": "EMPTY",
-                    "caller email addresses": "EMPTY"
+                    "provider name": "EMPTY",
+                    "provider phone number": "EMPTY",
+                    "provider email addresses": "EMPTY"
                     }                       
     return contact_info
