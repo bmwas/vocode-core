@@ -10,16 +10,17 @@ from vocode.streaming.utils.async_requester import AsyncRequestor
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 import json
-
-# Import aiohttp for asynchronous HTTP requests
 import aiohttp
 import os
+
 
 class EmptyParameters(BaseModel):
     pass
 
+
 class QueryContactCenterResponse(BaseModel):
-    contact_info: str
+    contact_info: dict
+
 
 class GetPhoneAndQueryContactCenterActionConfig(VocodeActionConfig, type="action_get_phone_and_query_contact_center"):
     def action_attempt_to_string(self, input: ActionInput) -> str:
@@ -28,12 +29,13 @@ class GetPhoneAndQueryContactCenterActionConfig(VocodeActionConfig, type="action
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
         return "Completed querying contact center"
 
+
 class GetPhoneAndQueryContactCenterAction(
     TwilioPhoneConversationAction[
         GetPhoneAndQueryContactCenterActionConfig, EmptyParameters, QueryContactCenterResponse
     ]
 ):
-    description: str = """search for caller name, caller phone number and caller email addresses ..."""
+    description: str = """Searches for caller's name, phone number, and email addresses in the contact center."""
 
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
@@ -57,6 +59,7 @@ class GetPhoneAndQueryContactCenterAction(
         self, action_input: ActionInput[EmptyParameters]
     ) -> ActionOutput[QueryContactCenterResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
+        logger.debug(f"Twilio Call SID: {twilio_call_sid}")
 
         twilio_client = self.conversation_state_manager.create_twilio_client()
 
@@ -69,61 +72,103 @@ class GetPhoneAndQueryContactCenterAction(
                     raise Exception("Failed to get call details")
                 else:
                     call_details = await response.json()
-        phone_number = call_details['from']  # Adjust if you need the 'to' number
+                    logger.debug(f"Call Details: {call_details}")
+
+        phone_number = call_details.get('from', '')
+        logger.debug(f"Extracted Phone Number: {phone_number}")
+
+        if not phone_number:
+            logger.error("No phone number found in call details.")
+            contact_info = {
+                "name": "EMPTY",
+                "phone_number": "EMPTY",
+                "email_addresses": "EMPTY"
+            }
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=QueryContactCenterResponse(contact_info=contact_info),
+            )
+
         server_url = os.environ.get("PORTAL_URL")
         headers = {
-            'Content-type': 'application/json',
+            'Content-Type': 'application/json',
             'X-Auth-Token': os.environ.get("PORTAL_AUTH_TOKEN"),
-            'X-User-Id': os.environ.get("PORTAL_USER_ID"),}  
+            'X-User-Id': os.environ.get("PORTAL_USER_ID"),
+        }
+
+        if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
+            logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
+            contact_info = {
+                "name": "EMPTY",
+                "phone_number": "EMPTY",
+                "email_addresses": "EMPTY"
+            }
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=QueryContactCenterResponse(contact_info=contact_info),
+            )
+
         contact_info = await query_contact_center(server_url, headers, phone_number)
+        logger.debug(f"Contact Info Retrieved: {contact_info}")
+
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=QueryContactCenterResponse(contact_info=contact_info),
         )
 
-## function that queries a contact center given a phone number.
+
+## Function that queries a contact center given a phone number.
 async def query_contact_center(server_url, headers, phone):
     # Normalize the phone number
-    if phone[0] != '+' and phone[0] != "1":
-        phone = "+1" + phone
-    elif phone[0] == "1":
-        phone = "+" + phone
+    if phone.startswith('+'):
+        normalized_phone = phone
+    elif phone.startswith('1'):
+        normalized_phone = "+" + phone
     else:
-        phone = phone
+        normalized_phone = "+1" + phone
 
-    params = {'phone': phone}
+    logger.debug(f"Normalized Phone Number: {normalized_phone}")
 
-    async with AsyncRequestor().get_session() as session:
-        async with session.get(
-            f'{server_url}/api/v1/omnichannel/contact.search',
-            headers=headers,
-            params=params
-        ) as r_search:
-            if r_search.status != 200:
-                logger.error(f"Failed to search contact: {r_search.status} {r_search.reason}")
-                contact_info = {
-                    "provider name": "EMPTY",
-                    "provider phone number": "EMPTY",
-                    "provider email addresses": "EMPTY"
-                    }               
-            else:
-                r_search_json = await r_search.json()
-                contact = r_search_json.get('contact', {})
-                
-                contact_info = {
-                    "provider name": contact.get('name', ''),
-                    "provider phone number": phone,
-                    "provider email addresses": contact.get('visitorEmails', [])
-                    }
-                if not contact:
-                    logger.error("Contact not found")
+    params = {'phone': normalized_phone}
+
+    try:
+        async with AsyncRequestor().get_session() as session:
+            async with session.get(
+                f'{server_url}/api/v1/omnichannel/contact.search',
+                headers=headers,
+                params=params
+            ) as r_search:
+                if r_search.status != 200:
+                    logger.error(f"Failed to search contact: {r_search.status} {r_search.reason}")
                     contact_info = {
-                    "provider name": "EMPTY",
-                    "provider phone number": "EMPTY",
-                    "provider email addresses": "EMPTY"
-                    }       
-    contact_info_string = (
-    f"First and last name of the provider is: {contact_info['provider name']}, "
-    f"Phone number of the provider on file is: {contact_info['provider phone number']} "
-    )                
-    return contact_info_string
+                        "name": "EMPTY",
+                        "phone_number": "EMPTY",
+                        "email_addresses": "EMPTY"
+                    }
+                else:
+                    r_search_json = await r_search.json()
+                    contact = r_search_json.get('contact', {})
+
+                    if not contact:
+                        logger.error("Contact not found")
+                        contact_info = {
+                            "name": "EMPTY",
+                            "phone_number": "EMPTY",
+                            "email_addresses": "EMPTY"
+                        }
+                    else:
+                        contact_info = {
+                            "name": contact.get('name', 'EMPTY') or "EMPTY",
+                            "phone_number": normalized_phone,
+                            "email_addresses": contact.get('visitorEmails', []) or "EMPTY"
+                        }
+    except Exception as e:
+        logger.error(f"Exception during contact search: {e}")
+        contact_info = {
+            "name": "EMPTY",
+            "phone_number": "EMPTY",
+            "email_addresses": "EMPTY"
+        }
+
+    logger.debug(f"Final Contact Info: {contact_info}")
+    return contact_info
