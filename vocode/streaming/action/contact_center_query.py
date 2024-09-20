@@ -1,7 +1,7 @@
-from typing import Type
+from typing import Type, Optional, Union, get_args, Literal
 
 from loguru import logger
-from pydantic.v1 import BaseModel
+from pydantic.v1 import BaseModel, Field
 
 from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
@@ -19,15 +19,21 @@ class EmptyParameters(BaseModel):
 
 
 class QueryContactCenterResponse(BaseModel):
-    contact_info: dict
+    success: bool
+    message: str  # Message string containing contact information or status
 
 
-class GetPhoneAndQueryContactCenterActionConfig(VocodeActionConfig, type="action_get_phone_and_query_contact_center"):
+class GetPhoneAndQueryContactCenterActionConfig(
+    VocodeActionConfig, type="action_get_phone_and_query_contact_center"
+):
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to get phone number and query contact center"
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
-        return "Completed querying contact center"
+        if output.response.success:
+            return "Successfully retrieved contact information"
+        else:
+            return "Failed to retrieve contact information"
 
 
 class GetPhoneAndQueryContactCenterAction(
@@ -69,7 +75,12 @@ class GetPhoneAndQueryContactCenterAction(
             async with session.get(url, auth=twilio_client.auth) as response:
                 if response.status != 200:
                     logger.error(f"Failed to get call details: {response.status} {response.reason}")
-                    raise Exception("Failed to get call details")
+                    success = False
+                    message = "Failed to retrieve call details."
+                    return ActionOutput(
+                        action_type=action_input.action_config.type,
+                        response=QueryContactCenterResponse(success=success, message=message),
+                    )
                 else:
                     call_details = await response.json()
                     logger.debug(f"Call Details: {call_details}")
@@ -79,14 +90,11 @@ class GetPhoneAndQueryContactCenterAction(
 
         if not phone_number:
             logger.error("No phone number found in call details.")
-            contact_info = {
-                "name": "EMPTY",
-                "phone_number": "EMPTY",
-                "email_addresses": "EMPTY"
-            }
+            success = False
+            message = "No phone number found in call details."
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(contact_info=contact_info),
+                response=QueryContactCenterResponse(success=success, message=message),
             )
 
         server_url = os.environ.get("PORTAL_URL")
@@ -98,22 +106,32 @@ class GetPhoneAndQueryContactCenterAction(
 
         if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
             logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
-            contact_info = {
-                "name": "EMPTY",
-                "phone_number": "EMPTY",
-                "email_addresses": "EMPTY"
-            }
+            success = False
+            message = "Configuration error: Missing environment variables."
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(contact_info=contact_info),
+                response=QueryContactCenterResponse(success=success, message=message),
             )
 
         contact_info = await query_contact_center(server_url, headers, phone_number)
         logger.debug(f"Contact Info Retrieved: {contact_info}")
 
+        # Determine success based on whether contact_info is not empty
+        if contact_info.get("name") != "EMPTY":
+            success = True
+            message = (
+                f"Caller Name: {contact_info.get('name')}, "
+                f"Phone Number: {contact_info.get('phone_number')}, "
+                f"Email Addresses: {', '.join(contact_info.get('email_addresses', []))}"
+            )
+        else:
+            success = False
+            message = "Caller not found in contact center."
+
+        logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=QueryContactCenterResponse(contact_info=contact_info),
+            response=QueryContactCenterResponse(success=success, message=message),
         )
 
 
