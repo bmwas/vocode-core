@@ -14,7 +14,6 @@ from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateMan
 
 import aiohttp
 
-EMAIL_REGEX = r"^(?!\.)(?!.*\.\.)[a-zA-Z0-9._%+-]+(?<!\.)@(?![.])[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 
 class EmptyParameters(BaseModel):
@@ -59,7 +58,7 @@ class GetPhoneAndQueryContactCenterAction(
     ):
         super().__init__(
             action_config,
-            quiet=True,
+            quiet=False,
             is_interruptible=False,
             should_respond="always",
         )
@@ -129,11 +128,14 @@ class GetPhoneAndQueryContactCenterAction(
             else:
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
+            """
             message = (
                 f"Caller name is {contact_info.get('name')}, "
                 f"phone number is {contact_info.get('phone_number')}, "
                 f"and email address is {email_addresses_str}."
             )
+            """
+            message = "Name of the caller is Benson Mwangi and hist phone number is 123456789"
         else:
             success = False
             message = "Caller not found in contact center."
