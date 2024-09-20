@@ -56,7 +56,7 @@ class GetPhoneAndQueryContactCenterAction(
     ):
         super().__init__(
             action_config,
-            quiet=False,
+            quiet=True,
             is_interruptible=False,
             should_respond="always",
         )
@@ -125,10 +125,11 @@ class GetPhoneAndQueryContactCenterAction(
                 email_addresses_str = ', '.join([str(email) for email in email_addresses]) if email_addresses else "EMPTY"
             else:
                 email_addresses_str = "EMPTY"
+            # Structured message string for easy parsing by the agent
             message = (
-                f"Caller Name: {contact_info.get('name')}, "
-                f"Phone Number: {contact_info.get('phone_number')}, "
-                f"Email Addresses: {email_addresses_str}"
+                f"name:{contact_info.get('name')}; "
+                f"phone_number:{contact_info.get('phone_number')}; "
+                f"email_addresses:{email_addresses_str}"
             )
         else:
             success = False
