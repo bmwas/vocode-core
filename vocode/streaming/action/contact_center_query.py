@@ -119,10 +119,16 @@ class GetPhoneAndQueryContactCenterAction(
         # Determine success based on whether contact_info is not empty
         if contact_info.get("name") != "EMPTY":
             success = True
+            email_addresses = contact_info.get('email_addresses')
+            if isinstance(email_addresses, list):
+                # Ensure all items are strings
+                email_addresses_str = ', '.join([str(email) for email in email_addresses]) if email_addresses else "EMPTY"
+            else:
+                email_addresses_str = "EMPTY"
             message = (
                 f"Caller Name: {contact_info.get('name')}, "
                 f"Phone Number: {contact_info.get('phone_number')}, "
-                f"Email Addresses: {', '.join(contact_info.get('email_addresses', []))}"
+                f"Email Addresses: {email_addresses_str}"
             )
         else:
             success = False
@@ -175,10 +181,18 @@ async def query_contact_center(server_url, headers, phone):
                             "email_addresses": "EMPTY"
                         }
                     else:
+                        # Extract email addresses, assuming 'visitorEmails' is a list of dicts
+                        visitor_emails = contact.get('visitorEmails', [])
+                        if isinstance(visitor_emails, list):
+                            # Extract 'email' field from each dict if exists
+                            email_addresses = [email.get('email') for email in visitor_emails if 'email' in email]
+                        else:
+                            email_addresses = []
+
                         contact_info = {
                             "name": contact.get('name', 'EMPTY') or "EMPTY",
                             "phone_number": normalized_phone,
-                            "email_addresses": contact.get('visitorEmails', []) or "EMPTY"
+                            "email_addresses": email_addresses if email_addresses else "EMPTY"
                         }
     except Exception as e:
         logger.error(f"Exception during contact search: {e}")
