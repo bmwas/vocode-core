@@ -56,7 +56,7 @@ class GetPhoneAndQueryContactCenterAction(
     ):
         super().__init__(
             action_config,
-            quiet=True,
+            quiet=False,
             is_interruptible=False,
             should_respond="always",
         )
