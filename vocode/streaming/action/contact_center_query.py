@@ -1,4 +1,7 @@
-from typing import Type, Optional, Union, get_args, Literal
+import re
+import json
+import os
+from typing import Type, Optional, Union, Literal
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -9,9 +12,8 @@ from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.async_requester import AsyncRequestor
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
-import json
 import aiohttp
-import os
+
 
 
 class EmptyParameters(BaseModel):
@@ -56,7 +58,7 @@ class GetPhoneAndQueryContactCenterAction(
     ):
         super().__init__(
             action_config,
-            quiet=True,
+            quiet=False,
             is_interruptible=False,
             should_respond="always",
         )
@@ -127,9 +129,9 @@ class GetPhoneAndQueryContactCenterAction(
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
             message = (
-                f"name:{contact_info.get('name')}; "
-                f"phone_number:{contact_info.get('phone_number')}; "
-                f"email_addresses:{email_addresses_str}"
+                f"Caller name is {contact_info.get('name')}, "
+                f"phone number is {contact_info.get('phone_number')}, "
+                f"and email address is {email_addresses_str}."
             )
         else:
             success = False
