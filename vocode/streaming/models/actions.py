@@ -75,14 +75,12 @@ class ActionConfig(TypedModel, type=ActionType.BASE):  # type: ignore
     action_trigger: ActionTrigger = FunctionCallActionTrigger(type="action_trigger_function_call")
 
     def action_attempt_to_string(self, input: "ActionInput") -> str:
-        print("Action Parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>",input.params.json())
         return ACTION_STARTED_FORMAT_STRING.format(
             action_name=self.type,
             action_params=input.params.json(),
         )
 
     def action_result_to_string(self, input: "ActionInput", output: "ActionOutput") -> str:
-        print("Action Output >>>>>>>>>>>>>>>>>>>>>>>>>>>>>",output.response.json())
         return ACTION_FINISHED_FORMAT_STRING.format(
             action_name=self.type,
             action_output=output.response.json(),
