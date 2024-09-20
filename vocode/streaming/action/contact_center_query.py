@@ -14,6 +14,7 @@ from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateMan
 
 import aiohttp
 
+EMAIL_REGEX = r"^(?!\.)(?!.*\.\.)[a-zA-Z0-9._%+-]+(?<!\.)@(?![.])[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 
 class EmptyParameters(BaseModel):
@@ -58,7 +59,7 @@ class GetPhoneAndQueryContactCenterAction(
     ):
         super().__init__(
             action_config,
-            quiet=False,
+            quiet=True,
             is_interruptible=False,
             should_respond="always",
         )
