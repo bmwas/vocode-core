@@ -135,7 +135,7 @@ class GetPhoneAndQueryContactCenterAction(
                 f"and email address is {email_addresses_str}."
             )
             """
-            message = "Name of the caller is Benson Mwangi and hist phone number is 123456789"
+            message = "Call name is Benson Mwangi and his phone number is 123456789"
         else:
             success = False
             message = "Caller not found in contact center."
@@ -143,7 +143,7 @@ class GetPhoneAndQueryContactCenterAction(
         logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=QueryContactCenterResponse(success=success, message=message),
+            response=QueryContactCenterResponse(success=success, message="Name of the caller is Benson Mwangi and phone number is 123456789"),
         )
 
 
