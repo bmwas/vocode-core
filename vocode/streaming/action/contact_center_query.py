@@ -19,7 +19,7 @@ class EmptyParameters(BaseModel):
     pass
 
 class QueryContactCenterResponse(BaseModel):
-    contact_info: dict
+    contact_info: str
 
 class GetPhoneAndQueryContactCenterActionConfig(VocodeActionConfig, type="action_get_phone_and_query_contact_center"):
     def action_attempt_to_string(self, input: ActionInput) -> str:
