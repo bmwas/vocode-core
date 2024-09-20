@@ -122,5 +122,8 @@ async def query_contact_center(server_url, headers, phone):
                     "provider phone number": "EMPTY",
                     "provider email addresses": "EMPTY"
                     }       
-        print("Contact Info >>>>>>>>>>", contact_info)                  
-    return contact_info
+    contact_info_string = (
+    f"Caller or provider phone name is: {contact_info['provider name']}, "
+    f"caller or provider phone number is: {contact_info['provider phone number']} "
+    f"and provider email addresses on file are: {', '.join(contact_info['provider email addresses'])}")                
+    return contact_info_string
