@@ -123,7 +123,7 @@ async def query_contact_center(server_url, headers, phone):
                     "provider email addresses": "EMPTY"
                     }       
     contact_info_string = (
-    f"Caller or provider phone name is: {contact_info['provider name']}, "
-    f"caller or provider phone number is: {contact_info['provider phone number']} "
+    f"First and last name of the provider is: {contact_info['provider name']}, "
+    f"Phone number of the provider on file is: {contact_info['provider phone number']} "
     )                
     return contact_info_string
