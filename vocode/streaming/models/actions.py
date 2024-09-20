@@ -59,6 +59,7 @@ class ActionType(str, Enum):
     END_CONVERSATION = "action_end_conversation"
     EXECUTE_EXTERNAL_ACTION = "action_external"
     CONTACT_CENTER_ACTION = "action_get_phone_and_query_contact_center"
+    SENDGRID_SEND_EMAIL_ACTION = "action_send_email"
 
     TRANSFER_CALL = "action_transfer_call"
     DTMF = "action_dtmf"
@@ -74,12 +75,14 @@ class ActionConfig(TypedModel, type=ActionType.BASE):  # type: ignore
     action_trigger: ActionTrigger = FunctionCallActionTrigger(type="action_trigger_function_call")
 
     def action_attempt_to_string(self, input: "ActionInput") -> str:
+        print("Action Parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>",input.params.json())
         return ACTION_STARTED_FORMAT_STRING.format(
             action_name=self.type,
             action_params=input.params.json(),
         )
 
     def action_result_to_string(self, input: "ActionInput", output: "ActionOutput") -> str:
+        print("Action Output >>>>>>>>>>>>>>>>>>>>>>>>>>>>>",output.response.json())
         return ACTION_FINISHED_FORMAT_STRING.format(
             action_name=self.type,
             action_output=output.response.json(),
