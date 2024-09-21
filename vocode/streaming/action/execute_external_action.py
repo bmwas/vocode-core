@@ -1,16 +1,24 @@
 import json
 from typing import Any, Dict, Optional, Type
 
+from loguru import logger
 from pydantic.v1 import BaseModel
 
-from vocode.streaming.action.base_action import BaseAction
+from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.action.external_actions_requester import (
     ExternalActionResponse,
     ExternalActionsRequester,
 )
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
-from vocode.streaming.models.actions import ActionInput, ActionOutput, ExternalActionProcessingMode
+from vocode.streaming.models.actions import (
+    ActionInput,
+    ActionOutput,
+    ExternalActionProcessingMode,
+)
 from vocode.streaming.models.message import BaseMessage
+from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
+from vocode.streaming.utils.async_requester import AsyncRequestor
+from vocode.streaming.utils.phone_numbers import sanitize_phone_number
 
 
 class ExecuteExternalActionVocodeActionConfig(
@@ -36,7 +44,7 @@ class ExecuteExternalActionResponse(BaseModel):
 
 
 class ExecuteExternalAction(
-    BaseAction[
+    TwilioPhoneConversationAction[
         ExecuteExternalActionVocodeActionConfig,
         ExecuteExternalActionParameters,
         ExecuteExternalActionResponse,
@@ -44,14 +52,17 @@ class ExecuteExternalAction(
 ):
     parameters_type: Type[ExecuteExternalActionParameters] = ExecuteExternalActionParameters
     response_type: Type[ExecuteExternalActionResponse] = ExecuteExternalActionResponse
+    conversation_state_manager: TwilioPhoneConversationStateManager
 
     def __init__(
         self,
         action_config: ExecuteExternalActionVocodeActionConfig,
+        conversation_state_manager: TwilioPhoneConversationStateManager,
     ):
         self.description = action_config.description
         super().__init__(
             action_config,
+            conversation_state_manager=conversation_state_manager,
             quiet=not action_config.speak_on_receive,
             should_respond="always" if action_config.speak_on_send else "never",
             is_interruptible=False,
@@ -77,18 +88,6 @@ class ExecuteExternalAction(
     def get_parameters_schema(self) -> Dict[str, Any]:
         return json.loads(self.action_config.input_schema)
 
-
-    def get_twilio_sid(self, action_input: ActionInput) -> str:
-        """
-        Extracts the Twilio Call SID from the action_input using the conversation_state_manager.
-        """
-        # Implementation depends on how Twilio Call SID is stored in the state manager
-        # Here's a placeholder implementation
-        twilio_call_sid = self.conversation_state_manager.get_current_twilio_call_sid()
-        if not twilio_call_sid:
-            raise ValueError("Twilio Call SID not found in the conversation state.")
-        return twilio_call_sid
-
     async def send_external_action_request(
         self, action_input: ActionInput[ExecuteExternalActionParameters]
     ) -> ExternalActionResponse:
@@ -100,19 +99,22 @@ class ExecuteExternalAction(
     async def run(
         self, action_input: ActionInput[ExecuteExternalActionParameters]
     ) -> ActionOutput[ExecuteExternalActionResponse]:
-        # TODO: this interruption handling needs to be refactored / DRYd
+        # Pre-processing logic
         if self.should_respond and action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
         self.conversation_state_manager.mute_agent()
 
+        # Extract Twilio Call SID using inherited method
         twilio_call_sid = self.get_twilio_sid(action_input)
-        print("Twilio Call SID >>>>>>>>>>>>>>>>>>>>>>",twilio_call_sid)
-        
+        print ("Twilio Call SID >>>>>>>>>>>>>>>>",twilio_call_sid)
+        logger.info(f"Twilio Call SID: {twilio_call_sid}")
+
+        # Send external action request
         response = await self.send_external_action_request(action_input)
         self.conversation_state_manager.unmute_agent()
 
-        # TODO (EA): pass specific context based on error
+        # Handle the response
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=ExecuteExternalActionResponse(
