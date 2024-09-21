@@ -29,7 +29,7 @@ class GetPhoneAndQueryContactCenterActionConfig(
     VocodeActionConfig, type="action_get_phone_and_query_contact_center"
 ):
     def action_attempt_to_string(self, input: ActionInput) -> str:
-        return "Attempting to get phone number and query contact center"
+        return "Attempting to retrieve caller contact information from contact center"
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
         # Return the agent_message directly if available
