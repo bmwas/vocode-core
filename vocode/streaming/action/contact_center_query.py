@@ -136,12 +136,15 @@ class GetPhoneAndQueryContactCenterAction(
             else:
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
+            """
             agent_message = (
                 f"I've successfully retrieved your contact information. "
                 f"Your name is {contact_info.get('name')}, "
                 f"your phone number is {contact_info.get('phone_number')}, "
                 f"and your email address is {email_addresses_str}."
             )
+            """
+            agent_message = "Name of caller is Benson..."
             result = {"success": True}
         else:
             success = False
