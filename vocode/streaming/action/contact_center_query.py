@@ -24,9 +24,9 @@ class QueryContactCenterResponse(BaseModel):
     agent_message: str  # Message string for the agent to vocalize
 
 
-class GetPhoneAndQueryContactCenterActionConfig(
-    VocodeActionConfig, type="action_get_phone_and_query_contact_center"
-):
+class GetPhoneAndQueryContactCenterActionConfig(VocodeActionConfig):
+    type: Literal["action_get_phone_and_query_contact_center"] = "action_get_phone_and_query_contact_center"
+
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to get phone number and query contact center"
 
@@ -136,15 +136,12 @@ class GetPhoneAndQueryContactCenterAction(
             else:
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
-            """
             agent_message = (
                 f"I've successfully retrieved your contact information. "
                 f"Your name is {contact_info.get('name')}, "
                 f"your phone number is {contact_info.get('phone_number')}, "
                 f"and your email address is {email_addresses_str}."
             )
-            """
-            agent_message = "Name of caller is Benson..."
             result = {"success": True}
         else:
             success = False
