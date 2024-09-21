@@ -81,9 +81,10 @@ class GetPhoneAndQueryContactCenterAction(
                 if response.status != 200:
                     logger.error(f"Failed to get call details: {response.status} {response.reason}")
                     success = False
+                    agent_message = "Failed to get call details"
                     message = {
-        "result": {"success": True},
-        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
+                        "result": {"success": False},
+                        "agent_message": agent_message} 
                     return ActionOutput(
                         action_type=action_input.action_config.type,
                         response=QueryContactCenterResponse(success=success, result=message),
@@ -98,9 +99,11 @@ class GetPhoneAndQueryContactCenterAction(
         if not phone_number:
             logger.error("No phone number found in call details.")
             success = False
+            agent_message = "No phone number found in call details"
             message = {
-        "result": {"success": True},
-        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
+                "result": {"success": False},
+                "agent_message": agent_message} 
+            
             return ActionOutput(
                 action_type=action_input.action_config.type,
                 response=QueryContactCenterResponse(success=success, result=message),
@@ -116,9 +119,10 @@ class GetPhoneAndQueryContactCenterAction(
         if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
             logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
             success = False
+            agent_message = "Caller query was unsuccessful"
             message = {
-        "result": {"success": True},
-        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
+                "result": {"success": False},
+                "agent_message": agent_message}            
             return ActionOutput(
                 action_type=action_input.action_config.type,
                 response=QueryContactCenterResponse(success=success, result=message),
@@ -137,23 +141,21 @@ class GetPhoneAndQueryContactCenterAction(
             else:
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
-            """
-            message = (
+            agent_message = (
                 f"Caller name is {contact_info.get('name')}, "
                 f"phone number is {contact_info.get('phone_number')}, "
                 f"and email address is {email_addresses_str}."
             )
-            """
             message = {
-        "result": {"success": True},
-        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
+                "result": {"success": True},
+                "agent_message": agent_message}
         else:
             success = False
+            agent_message = "Caller query was unsuccessful"
             message = {
-        "result": {"success": True},
-        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
-
-        logger.debug(f"Final Contact Info Message: {message}")
+                "result": {"success": True},
+                "agent_message": agent_message}
+        logger.debug(f"Final Contact Info Message: {agent_message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=QueryContactCenterResponse(success=success, result=message),
