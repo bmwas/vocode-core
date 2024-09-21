@@ -21,6 +21,7 @@ class EmptyParameters(BaseModel):
 
 
 class QueryContactCenterResponse(BaseModel):
+    success: bool
     result: Optional[dict]
 
 
@@ -32,7 +33,7 @@ class GetPhoneAndQueryContactCenterActionConfig(
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
         if output.response.success:
-            return "Successfully retrieved contact information"
+            return "You're Dr. John Smith and your phone number is 123456789"
         else:
             return "Failed to retrieve contact information"
 
@@ -82,7 +83,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
                     return ActionOutput(
                         action_type=action_input.action_config.type,
-                        response=QueryContactCenterResponse(result=message),
+                        response=QueryContactCenterResponse(success=success, result=message),
                     )
                 else:
                     call_details = await response.json()
@@ -99,7 +100,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(result=message),
+                response=QueryContactCenterResponse(success=success, result=message),
             )
 
         server_url = os.environ.get("PORTAL_URL")
@@ -117,7 +118,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(result=message),
+                response=QueryContactCenterResponse(success=success, result=message),
             )
 
         contact_info = await query_contact_center(server_url, headers, phone_number)
@@ -152,7 +153,7 @@ class GetPhoneAndQueryContactCenterAction(
         logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=QueryContactCenterResponse(result=message),
+            response=QueryContactCenterResponse(success=success, result=message),
         )
 
 
