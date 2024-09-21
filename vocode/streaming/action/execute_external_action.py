@@ -1,3 +1,5 @@
+# execute_external_action.py
+
 import json
 from typing import Any, Dict, Optional, Type
 
@@ -107,7 +109,6 @@ class ExecuteExternalAction(
 
         # Extract Twilio Call SID using inherited method
         twilio_call_sid = self.get_twilio_sid(action_input)
-        print ("Twilio Call SID >>>>>>>>>>>>>>>>",twilio_call_sid)
         logger.info(f"Twilio Call SID: {twilio_call_sid}")
 
         # Send external action request
