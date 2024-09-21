@@ -108,6 +108,7 @@ class ExecuteExternalAction(
 
         twilio_call_sid = self.get_twilio_sid(action_input)
         print("Twilio Call SID >>>>>>>>>>>>>>>>>>>>>>",twilio_call_sid)
+        
         response = await self.send_external_action_request(action_input)
         self.conversation_state_manager.unmute_agent()
 
