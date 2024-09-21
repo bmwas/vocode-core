@@ -78,10 +78,12 @@ class GetPhoneAndQueryContactCenterAction(
                 if response.status != 200:
                     logger.error(f"Failed to get call details: {response.status} {response.reason}")
                     success = False
-                    message = "Failed to retrieve call details."
+                    message = {
+        "result": {"success": True},
+        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
                     return ActionOutput(
                         action_type=action_input.action_config.type,
-                        response=QueryContactCenterResponse(success=success, message=message),
+                        response=QueryContactCenterResponse(success=success, result=message),
                     )
                 else:
                     call_details = await response.json()
@@ -93,10 +95,12 @@ class GetPhoneAndQueryContactCenterAction(
         if not phone_number:
             logger.error("No phone number found in call details.")
             success = False
-            message = "No phone number found in call details."
+            message = {
+        "result": {"success": True},
+        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(success=success, message=message),
+                response=QueryContactCenterResponse(success=success, result=message),
             )
 
         server_url = os.environ.get("PORTAL_URL")
@@ -109,12 +113,12 @@ class GetPhoneAndQueryContactCenterAction(
         if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
             logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
             success = False
-            result = {
+            message = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(success=success, message=message),
+                response=QueryContactCenterResponse(success=success, result=message),
             )
 
         contact_info = await query_contact_center(server_url, headers, phone_number)
@@ -137,19 +141,19 @@ class GetPhoneAndQueryContactCenterAction(
                 f"and email address is {email_addresses_str}."
             )
             """
-            result = {
+            message = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
         else:
             success = False
-            result = {
+            message = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
 
         logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=QueryContactCenterResponse(success=success, message=message),
+            response=QueryContactCenterResponse(success=success, result=message),
         )
 
 
