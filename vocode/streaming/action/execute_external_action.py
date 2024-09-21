@@ -77,6 +77,18 @@ class ExecuteExternalAction(
     def get_parameters_schema(self) -> Dict[str, Any]:
         return json.loads(self.action_config.input_schema)
 
+
+    def get_twilio_sid(self, action_input: ActionInput) -> str:
+        """
+        Extracts the Twilio Call SID from the action_input using the conversation_state_manager.
+        """
+        # Implementation depends on how Twilio Call SID is stored in the state manager
+        # Here's a placeholder implementation
+        twilio_call_sid = self.conversation_state_manager.get_current_twilio_call_sid()
+        if not twilio_call_sid:
+            raise ValueError("Twilio Call SID not found in the conversation state.")
+        return twilio_call_sid
+
     async def send_external_action_request(
         self, action_input: ActionInput[ExecuteExternalActionParameters]
     ) -> ExternalActionResponse:
@@ -93,6 +105,9 @@ class ExecuteExternalAction(
             await action_input.user_message_tracker.wait()
 
         self.conversation_state_manager.mute_agent()
+
+        twilio_call_sid = self.get_twilio_sid(action_input)
+        print("Twilio Call SID >>>>>>>>>>>>>>>>>>>>>>",twilio_call_sid)
         response = await self.send_external_action_request(action_input)
         self.conversation_state_manager.unmute_agent()
 
