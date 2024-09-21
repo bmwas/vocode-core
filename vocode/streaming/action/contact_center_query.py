@@ -22,7 +22,7 @@ class EmptyParameters(BaseModel):
 
 class QueryContactCenterResponse(BaseModel):
     success: bool
-    message: Optional[dict]
+    result: Optional[dict]
 
 
 class GetPhoneAndQueryContactCenterActionConfig(
@@ -109,7 +109,7 @@ class GetPhoneAndQueryContactCenterAction(
         if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
             logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
             success = False
-            message = {
+            result = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
@@ -137,12 +137,12 @@ class GetPhoneAndQueryContactCenterAction(
                 f"and email address is {email_addresses_str}."
             )
             """
-            message = {
+            result = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
         else:
             success = False
-            message = {
+            result = {
         "result": {"success": True},
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
 
