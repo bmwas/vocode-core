@@ -32,8 +32,11 @@ class GetPhoneAndQueryContactCenterActionConfig(
         return "Attempting to get phone number and query contact center"
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
-        if output.response.success:
-            return "You're Dr. John Smith and your phone number is 123456789"
+        # Return the agent_message directly if available
+        if output.response and output.response.result and "agent_message" in output.response.result:
+            return output.response.result["agent_message"]
+        elif output.response.success:
+            return "Operation was successful, but no message provided."
         else:
             return "Failed to retrieve contact information"
 
