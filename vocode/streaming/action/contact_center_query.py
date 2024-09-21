@@ -21,7 +21,6 @@ class EmptyParameters(BaseModel):
 
 
 class QueryContactCenterResponse(BaseModel):
-    success: bool
     result: Optional[dict]
 
 
