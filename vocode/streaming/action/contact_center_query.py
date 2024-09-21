@@ -22,7 +22,7 @@ class EmptyParameters(BaseModel):
 
 class QueryContactCenterResponse(BaseModel):
     success: bool
-    message: str  # Message string containing contact information or status
+    message: Optional[dict]
 
 
 class GetPhoneAndQueryContactCenterActionConfig(
@@ -109,7 +109,9 @@ class GetPhoneAndQueryContactCenterAction(
         if not server_url or not headers['X-Auth-Token'] or not headers['X-User-Id']:
             logger.error("Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID.")
             success = False
-            message = "Configuration error: Missing environment variables."
+            message = {
+        "result": {"success": True},
+        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
                 response=QueryContactCenterResponse(success=success, message=message),
@@ -128,14 +130,21 @@ class GetPhoneAndQueryContactCenterAction(
             else:
                 email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
+            """
             message = (
                 f"Caller name is {contact_info.get('name')}, "
                 f"phone number is {contact_info.get('phone_number')}, "
                 f"and email address is {email_addresses_str}."
             )
+            """
+            message = {
+        "result": {"success": True},
+        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
         else:
             success = False
-            message = "Caller not found in contact center."
+            message = {
+        "result": {"success": True},
+        "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
 
         logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(

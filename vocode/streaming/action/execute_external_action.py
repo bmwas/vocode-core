@@ -1,26 +1,16 @@
-# execute_external_action.py
-
 import json
 from typing import Any, Dict, Optional, Type
 
-from loguru import logger
 from pydantic.v1 import BaseModel
 
-from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
+from vocode.streaming.action.base_action import BaseAction
 from vocode.streaming.action.external_actions_requester import (
     ExternalActionResponse,
     ExternalActionsRequester,
 )
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
-from vocode.streaming.models.actions import (
-    ActionInput,
-    ActionOutput,
-    ExternalActionProcessingMode,
-)
+from vocode.streaming.models.actions import ActionInput, ActionOutput, ExternalActionProcessingMode
 from vocode.streaming.models.message import BaseMessage
-from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
-from vocode.streaming.utils.async_requester import AsyncRequestor
-from vocode.streaming.utils.phone_numbers import sanitize_phone_number
 
 
 class ExecuteExternalActionVocodeActionConfig(
@@ -46,7 +36,7 @@ class ExecuteExternalActionResponse(BaseModel):
 
 
 class ExecuteExternalAction(
-    TwilioPhoneConversationAction[
+    BaseAction[
         ExecuteExternalActionVocodeActionConfig,
         ExecuteExternalActionParameters,
         ExecuteExternalActionResponse,
@@ -54,17 +44,14 @@ class ExecuteExternalAction(
 ):
     parameters_type: Type[ExecuteExternalActionParameters] = ExecuteExternalActionParameters
     response_type: Type[ExecuteExternalActionResponse] = ExecuteExternalActionResponse
-    conversation_state_manager: TwilioPhoneConversationStateManager
 
     def __init__(
         self,
         action_config: ExecuteExternalActionVocodeActionConfig,
-        conversation_state_manager: TwilioPhoneConversationStateManager,
     ):
         self.description = action_config.description
         super().__init__(
             action_config,
-            conversation_state_manager=conversation_state_manager,
             quiet=not action_config.speak_on_receive,
             should_respond="always" if action_config.speak_on_send else "never",
             is_interruptible=False,
@@ -101,21 +88,15 @@ class ExecuteExternalAction(
     async def run(
         self, action_input: ActionInput[ExecuteExternalActionParameters]
     ) -> ActionOutput[ExecuteExternalActionResponse]:
-        # Pre-processing logic
+        # TODO: this interruption handling needs to be refactored / DRYd
         if self.should_respond and action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
         self.conversation_state_manager.mute_agent()
-
-        # Extract Twilio Call SID using inherited method
-        twilio_call_sid = self.get_twilio_sid(action_input)
-        logger.info(f"Twilio Call SID: {twilio_call_sid}")
-
-        # Send external action request
         response = await self.send_external_action_request(action_input)
         self.conversation_state_manager.unmute_agent()
 
-        # Handle the response
+        # TODO (EA): pass specific context based on error
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=ExecuteExternalActionResponse(
