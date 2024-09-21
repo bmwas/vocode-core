@@ -81,7 +81,7 @@ class GetPhoneAndQueryContactCenterAction(
                 if response.status != 200:
                     logger.error(f"Failed to get call details: {response.status} {response.reason}")
                     success = False
-                    agent_message = "Failed to get call details"
+                    agent_message = "Failed to get caller details"
                     message = {
                         "result": {"success": False},
                         "agent_message": agent_message} 
