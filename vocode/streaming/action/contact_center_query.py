@@ -82,7 +82,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
                     return ActionOutput(
                         action_type=action_input.action_config.type,
-                        response=QueryContactCenterResponse(success=success, result=message),
+                        response=QueryContactCenterResponse(result=message),
                     )
                 else:
                     call_details = await response.json()
@@ -99,7 +99,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(success=success, result=message),
+                response=QueryContactCenterResponse(result=message),
             )
 
         server_url = os.environ.get("PORTAL_URL")
@@ -117,7 +117,7 @@ class GetPhoneAndQueryContactCenterAction(
         "agent_message": "Name of Caller is Dr. John Smith and Phone is 123456789"}
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=QueryContactCenterResponse(success=success, result=message),
+                response=QueryContactCenterResponse(result=message),
             )
 
         contact_info = await query_contact_center(server_url, headers, phone_number)
@@ -152,7 +152,7 @@ class GetPhoneAndQueryContactCenterAction(
         logger.debug(f"Final Contact Info Message: {message}")
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=QueryContactCenterResponse(success=success, result=message),
+            response=QueryContactCenterResponse(result=message),
         )
 
 
