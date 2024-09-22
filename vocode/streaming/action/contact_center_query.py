@@ -46,8 +46,10 @@ class GetPhoneAndQueryContactCenterAction(
         GetPhoneAndQueryContactCenterActionConfig, EmptyParameters, QueryContactCenterResponse
     ]
 ):
-    description: str = """Searches for caller's name, phone number, and email addresses in the contact center."""
-
+    description: str = """
+    Searches for the caller's name, phone number, and email addresses in the contact center.
+    Triggered at the start of every call (e.g. after greetings) and throughout the call as needed.
+    """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
