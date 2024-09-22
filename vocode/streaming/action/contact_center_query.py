@@ -47,10 +47,9 @@ class GetPhoneAndQueryContactCenterAction(
     ]
 ):
     description: str = """
-    Query/Search caller info (e.g. name, phone number, and email addresses).
-    Query caller info at the beginning of a call
-    Query or search for caller info if caller is returning a call.
-        
+    Queries caller information such as; name, phone number, and email address
+    Used at the beginning of a call, if a caller is returning a call. Also used if 
+    there's a need to know the caller's name, phone and email adress.
     """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
