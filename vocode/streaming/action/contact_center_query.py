@@ -47,8 +47,9 @@ class GetPhoneAndQueryContactCenterAction(
     ]
 ):
     description: str = """
-    Use this to query contact center if name, phone number and email address of the caller are unknown
-    You can use this at the start of the call after greetings
+    IF caller information (e.g. name, phone number, address and email address) are unknown,
+    use this action to get this information.
+    You can use this at the start of the call (e.g. after greetings)
     You can also use this anytime you need to query caller's personal information such as name, phone number, address
     """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
