@@ -59,8 +59,8 @@ class TransferCallVocodeActionConfig(VocodeActionConfig, type="action_transfer_c
         return action_description
 
 
-FUNCTION_DESCRIPTION = "Transfers the call to a new number. This is never used while on hold."
-QUIET = True
+FUNCTION_DESCRIPTION = "Transfers or forwards call to a manager or supervisor ..."
+QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
 
