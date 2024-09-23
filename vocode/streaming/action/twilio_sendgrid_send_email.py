@@ -77,11 +77,7 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
             return "Failed to send email"
 
 
-FUNCTION_DESCRIPTION = """
-Sends an email during an ongoing call using SendGrid API with a dynamic template.
-The input to this action is the recipient's email address, email subject, provider name, and provider link.
-The email address, email subject, provider name, and provider link are all required parameters.
-"""
+FUNCTION_DESCRIPTION = """Sends provider a survey form link during an ongoing call ..."""
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
