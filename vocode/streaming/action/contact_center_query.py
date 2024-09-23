@@ -47,10 +47,10 @@ class GetPhoneAndQueryContactCenterAction(
     ]
 ):
     description: str = """
-    IF caller information (e.g. name, phone number, address and email address) are unknown,
-    use this action to get this information.
-    You can use this at the start of the call (e.g. after greetings)
-    You can also use this anytime you need to query caller's personal information such as name, phone number, address
+    Queries caller information such as; name, phone number, and email addresses
+    Query user name, phone, address and email if this is a new call
+    Used at the beginning of a call, if a caller is returning a call 
+    Query or search for caller info if caller is returning a call.
     """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
