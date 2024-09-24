@@ -27,7 +27,7 @@ class SaveContactCenterResponse(BaseModel):
 
 
 class SaveContactToContactCenterActionConfig(
-    VocodeActionConfig, type="action_save_contact_center"
+    VocodeActionConfig, type="action_get_phone_and_save_contact_center"
 ):
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to save caller contact information to contact center"
@@ -148,10 +148,9 @@ class SaveContactToContactCenterAction(
                 response=SaveContactCenterResponse(success=success, result=message),
             )
 
-        #caller_name = action_input.parameters.caller_name
-        #email_address = action_input.parameters.email_address
-        caller_name = "John Doe"
-        email_address = "john.doe@gmail.com"
+        # **Fixed Attribute Access Here**
+        caller_name = action_input.params.caller_name
+        email_address = action_input.params.email_address
 
         success, result = await add_to_contact_center(
             server_url, headers, phone_number, caller_name, email_address
