@@ -27,7 +27,7 @@ class SaveContactCenterResponse(BaseModel):
 
 
 class SaveContactToContactCenterActionConfig(
-    VocodeActionConfig, type="action_save_contact_center"
+    VocodeActionConfig, type="action_get_phone_and_save_contact_center"
 ):
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to save caller contact information to contact center"
@@ -151,12 +151,17 @@ class SaveContactToContactCenterAction(
         caller_name = action_input.parameters.caller_name
         email_address = action_input.parameters.email_address
 
-        success, agent_message = await add_to_contact_center(
+        success, result = await add_to_contact_center(
             server_url, headers, phone_number, caller_name, email_address
         )
 
+        if success:
+            agent_message = "Contact saved successfully"
+        else:
+            agent_message = f"Failed to save contact: {result}"
+
         message = {
-            "result": {"success": success},
+            "result": {"success": success, "data": result},
             "agent_message": agent_message,
         }
 
@@ -170,42 +175,69 @@ class SaveContactToContactCenterAction(
 
 async def add_to_contact_center(server_url, headers, phone, caller_name, email_address):
     # Normalize phone number
-    if phone.startswith("+"):
-        normalized_phone = phone
-    elif phone.startswith("1"):
-        normalized_phone = "+" + phone
+    if not phone.startswith('+') and not phone.startswith('1'):
+        phone = '+1' + phone
+    elif phone.startswith('1'):
+        phone = '+' + phone
     else:
-        normalized_phone = "+1" + phone
+        phone = phone
 
-    logger.debug(f"Normalized Phone Number: {normalized_phone}")
+    logger.debug(f"Normalized Phone Number: {phone}")
+
+    params = {'phone': phone}
 
     try:
-        # Create a random ID and token
+        async with AsyncRequestor().get_session() as session:
+            # Search for existing contact
+            async with session.get(
+                f"{server_url}/api/v1/omnichannel/contact.search",
+                headers=headers,
+                params=params,
+            ) as r_search:
+                if r_search.status != 200:
+                    logger.error(
+                        f"Failed to search contact: {r_search.status} {r_search.reason}"
+                    )
+                    cnt = []
+                else:
+                    r_search_json = await r_search.json()
+                    cnt = r_search_json.get('contact', [])
+    except Exception as e:
+        logger.error(f"Exception during contact search: {e}")
+        cnt = []
+
+    if not cnt:
+        # Create a random id and token
         token = secrets.token_urlsafe(22)
         _id = secrets.token_urlsafe(17)
         data = {
             "_id": _id,
             "token": token,
-            "phone": normalized_phone,
+            "phone": phone,
             "name": caller_name,
             "email": email_address,
         }
         logger.debug(f"Data to send: {data}")
 
-        async with AsyncRequestor().get_session() as session:
-            async with session.post(
-                f"{server_url}/api/v1/omnichannel/contact",
-                headers=headers,
-                json=data,
-            ) as r_add:
-                if r_add.status != 200:
-                    logger.error(
-                        f"Failed to add contact: {r_add.status} {r_add.reason}"
-                    )
-                    return False, "Failed to add contact"
-                else:
-                    logger.debug("Contact added successfully")
-                    return True, "Contact added successfully"
-    except Exception as e:
-        logger.error(f"Exception during contact add: {e}")
-        return False, f"Exception occurred: {e}"
+        try:
+            async with AsyncRequestor().get_session() as session:
+                async with session.post(
+                    f"{server_url}/api/v1/omnichannel/contact",
+                    headers=headers,
+                    data=json.dumps(data),
+                ) as r_add:
+                    if r_add.status != 200:
+                        logger.error(
+                            f"Failed to add contact: {r_add.status} {r_add.reason}"
+                        )
+                        return False, "Unable to add contact"
+                    else:
+                        logger.debug("Contact added successfully")
+                        c_response = {"token": token, "_id": _id}
+                        return True, c_response
+        except Exception as e:
+            logger.error(f"Exception during contact addition: {e}")
+            return False, f"Exception occurred: {e}"
+    else:
+        logger.debug("Contact already exists")
+        return True, {"message": "Contact already exists"}
