@@ -67,7 +67,7 @@ class AddContactToContactCenterAction(
         )
 
     async def run(
-        self, action_input: ActionInput[AddContactParameters]
+        self, action_input
     ) -> ActionOutput[AddToContactCenterResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         logger.debug(f"Twilio Call SID: {twilio_call_sid}")
@@ -130,8 +130,8 @@ class AddContactToContactCenterAction(
 
         # Prepare contact body
         cbody = {
-            "name": action_input.parameters.name,
-            "email": action_input.parameters.email,
+            "name": action_input.input_parameters.name,
+            "email": action_input.input_parameters.email,
             "phone": phone_number
         }
 
@@ -140,7 +140,7 @@ class AddContactToContactCenterAction(
 
         if contact_response.get("success"):
             success = True
-            agent_message = f"Contact {action_input.parameters.name} has been successfully added to the contact center."
+            agent_message = f"Contact {action_input.input_parameters.name} has been successfully added to the contact center."
             message = {
                 "result": {"success": True},
                 "agent_message": agent_message}
