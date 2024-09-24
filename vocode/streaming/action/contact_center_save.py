@@ -2,7 +2,7 @@ import re
 import json
 import os
 import secrets
-from typing import Type, Optional
+from typing import Type
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -67,7 +67,7 @@ class AddContactToContactCenterAction(
         )
 
     async def run(
-        self, action_input
+        self, action_input: ActionInput[AddContactParameters]
     ) -> ActionOutput[AddToContactCenterResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         logger.debug(f"Twilio Call SID: {twilio_call_sid}")
@@ -128,10 +128,10 @@ class AddContactToContactCenterAction(
                 response=AddToContactCenterResponse(success=success, result=message),
             )
 
-        # Prepare contact body
+        # Prepare contact body using self.input_parameters
         cbody = {
-            "name": action_input.input_parameters.name,
-            "email": action_input.input_parameters.email,
+            "name": self.input_parameters.name,
+            "email": self.input_parameters.email,
             "phone": phone_number
         }
 
@@ -140,7 +140,7 @@ class AddContactToContactCenterAction(
 
         if contact_response.get("success"):
             success = True
-            agent_message = f"Contact {action_input.input_parameters.name} has been successfully added to the contact center."
+            agent_message = f"Contact {self.input_parameters.name} has been successfully added to the contact center."
             message = {
                 "result": {"success": True},
                 "agent_message": agent_message}
