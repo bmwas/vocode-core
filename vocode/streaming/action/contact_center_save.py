@@ -27,7 +27,7 @@ class SaveContactCenterResponse(BaseModel):
 
 
 class SaveContactToContactCenterActionConfig(
-    VocodeActionConfig, type="action_get_phone_and_save_contact_center"
+    VocodeActionConfig, type="action_save_contact_center"
 ):
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to save caller contact information to contact center"
