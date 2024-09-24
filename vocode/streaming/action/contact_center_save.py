@@ -148,8 +148,10 @@ class SaveContactToContactCenterAction(
                 response=SaveContactCenterResponse(success=success, result=message),
             )
 
-        caller_name = action_input.parameters.caller_name
-        email_address = action_input.parameters.email_address
+        #caller_name = action_input.parameters.caller_name
+        #email_address = action_input.parameters.email_address
+        caller_name = "John Doe"
+        email_address = "john.doe@gmail.com"
 
         success, result = await add_to_contact_center(
             server_url, headers, phone_number, caller_name, email_address
