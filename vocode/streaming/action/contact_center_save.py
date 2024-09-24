@@ -2,7 +2,7 @@ import re
 import json
 import os
 import secrets
-from typing import Type
+from typing import Type, Optional  # Added Optional to imports
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -21,7 +21,7 @@ class AddContactParameters(BaseModel):
 
 class AddToContactCenterResponse(BaseModel):
     success: bool
-    result: Optional[dict]
+    result: Optional[dict]  # This line requires Optional to be imported
 
 class AddContactToContactCenterActionConfig(
     VocodeActionConfig, type="action_add_contact_to_contact_center"
