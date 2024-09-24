@@ -136,6 +136,7 @@ class TwilioSendEmail(
         message.template_id = template_id  
         # Set the dynamic template data
         message.dynamic_template_data = {
+            'subject': subject,
             'provider_name': provider_name,
             'provider_link': provider_link,
             # Include additional dynamic data if needed
