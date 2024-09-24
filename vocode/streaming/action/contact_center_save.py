@@ -2,7 +2,7 @@ import re
 import json
 import os
 import secrets
-from typing import Type, Optional, Union, Literal
+from typing import Type, Optional
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -17,7 +17,7 @@ import aiohttp
 
 class AddContactParameters(BaseModel):
     name: str = Field(..., description="Name of the contact")
-    email: Optional[str] = Field(None, description="Email address of the contact")
+    email: str = Field(..., description="Email address of the contact")
 
 class AddToContactCenterResponse(BaseModel):
     success: bool
@@ -45,7 +45,7 @@ class AddContactToContactCenterAction(
 ):
     description: str = """
     Saves caller information such as name, phone number, and email address to the contact center.
-    Use this action when the agent knows the caller's name and optionally their email address.
+    Use this action when the agent knows the caller's name and their email address.
     The phone number will be extracted from the ongoing call using the Twilio SID.
     """
     response_type: Type[AddToContactCenterResponse] = AddToContactCenterResponse
@@ -130,8 +130,8 @@ class AddContactToContactCenterAction(
 
         # Prepare contact body
         cbody = {
-            "name": action_input.parameters.name,
-            "email": action_input.parameters.email or "",
+            "name": action_input.action_input.parameters.name,
+            "email": action_input.action_input.parameters.email,
             "phone": phone_number
         }
 
@@ -140,7 +140,7 @@ class AddContactToContactCenterAction(
 
         if contact_response.get("success"):
             success = True
-            agent_message = f"Contact {action_input.parameters.name} has been successfully added to the contact center."
+            agent_message = f"Contact {action_input.action_input.parameters.name} has been successfully added to the contact center."
             message = {
                 "result": {"success": True},
                 "agent_message": agent_message}
@@ -188,7 +188,7 @@ async def add_to_contact_center(server_url, headers, cbody):
             "token": token,
             "phone": phone,
             "name": cbody["name"],
-            "email": cbody.get("email", "")
+            "email": cbody["email"]
         }
         try:
             async with AsyncRequestor().get_session() as session:
