@@ -26,6 +26,8 @@ class AddToContactCenterResponse(BaseModel):
 class AddContactToContactCenterActionConfig(
     VocodeActionConfig, type="action_add_contact_to_contact_center"
 ):
+    parameters: AddContactParameters  # Added this line
+
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return "Attempting to save caller contact information to contact center"
 
@@ -65,9 +67,10 @@ class AddContactToContactCenterAction(
             is_interruptible=False,
             should_respond="always",
         )
+        self.parameters = action_config.parameters  # Added this line
 
     async def run(
-        self, action_input: ActionInput[AddContactParameters]
+        self, action_input: ActionInput
     ) -> ActionOutput[AddToContactCenterResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         logger.debug(f"Twilio Call SID: {twilio_call_sid}")
