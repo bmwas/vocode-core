@@ -2,7 +2,7 @@ import re
 import json
 import os
 import secrets
-from typing import Type, Optional  # Added Optional to imports
+from typing import Type, Optional
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -21,7 +21,7 @@ class AddContactParameters(BaseModel):
 
 class AddToContactCenterResponse(BaseModel):
     success: bool
-    result: Optional[dict]  # This line requires Optional to be imported
+    result: Optional[dict]
 
 class AddContactToContactCenterActionConfig(
     VocodeActionConfig, type="action_add_contact_to_contact_center"
@@ -128,10 +128,10 @@ class AddContactToContactCenterAction(
                 response=AddToContactCenterResponse(success=success, result=message),
             )
 
-        # Prepare contact body using self.input_parameters
+        # Prepare contact body using self.parameters
         cbody = {
-            "name": self.input_parameters.name,
-            "email": self.input_parameters.email,
+            "name": self.parameters.name,
+            "email": self.parameters.email,
             "phone": phone_number
         }
 
@@ -140,7 +140,7 @@ class AddContactToContactCenterAction(
 
         if contact_response.get("success"):
             success = True
-            agent_message = f"Contact {self.input_parameters.name} has been successfully added to the contact center."
+            agent_message = f"Contact {self.parameters.name} has been successfully added to the contact center."
             message = {
                 "result": {"success": True},
                 "agent_message": agent_message}
