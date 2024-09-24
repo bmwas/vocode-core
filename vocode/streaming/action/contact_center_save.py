@@ -130,8 +130,8 @@ class AddContactToContactCenterAction(
 
         # Prepare contact body
         cbody = {
-            "name": action_input.action_input.parameters.name,
-            "email": action_input.action_input.parameters.email,
+            "name": action_input.parameters.name,
+            "email": action_input.parameters.email,
             "phone": phone_number
         }
 
@@ -140,7 +140,7 @@ class AddContactToContactCenterAction(
 
         if contact_response.get("success"):
             success = True
-            agent_message = f"Contact {action_input.action_input.parameters.name} has been successfully added to the contact center."
+            agent_message = f"Contact {action_input.parameters.name} has been successfully added to the contact center."
             message = {
                 "result": {"success": True},
                 "agent_message": agent_message}
