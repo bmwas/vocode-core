@@ -59,7 +59,7 @@ class ActionType(str, Enum):
     END_CONVERSATION = "action_end_conversation"
     EXECUTE_EXTERNAL_ACTION = "action_external"
     CONTACT_CENTER_QUERY = "action_get_phone_and_query_contact_center"
-    CONTACT_CENTER_SAVE = "action_add_contact_to_contact_center"
+    CONTACT_CENTER_SAVE = "action_save_contact_center"
     TWILIO_SENDGRID_SEND_EMAIL = "action_send_email"
     TRANSFER_CALL = "action_transfer_call"
     DTMF = "action_dtmf"
