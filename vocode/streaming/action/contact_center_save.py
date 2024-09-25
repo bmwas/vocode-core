@@ -232,8 +232,6 @@ class TwilioAddToContactCenter(
             "X-Auth-Token": os.environ.get("PORTAL_AUTH_TOKEN"),
             "X-User-Id": os.environ.get("PORTAL_USER_ID"),
         }
-        transcript = action_input.conversation_state.get('transcript', '')
-        print("Transcript!! >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" ,transcript)
         success, response_message = await add_to_contact_center(
             server_url,
             headers,
