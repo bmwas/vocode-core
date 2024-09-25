@@ -82,7 +82,7 @@ class AddToContactCenterVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = "Adds caller information to the contact center"
+FUNCTION_DESCRIPTION = "Adds or saves every caller's information (i.e. name, phone number and email address) to the contact center"
 QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
