@@ -112,7 +112,6 @@ async def add_to_contact_center(
                 params=params,
             ) as r_search:
                 if r_search.status != 200:
-                    print(f"Failed to reach contact center >>>>>>>>>>>>>>{r_search.status} {r_search.reason}")
                     logger.error(
                         f"Failed to search contact: {r_search.status} {r_search.reason}"
                     )
@@ -121,7 +120,6 @@ async def add_to_contact_center(
                     r_search_json = await r_search.json()
                     cnt = r_search_json.get("contact", [])
     except Exception as e:
-        print(f"There's ane error>>>>>>>>>>>>>> Exception during contact search: {e} ")
         logger.error(f"Exception during contact search: {e}")
         cnt = []
 
@@ -234,7 +232,7 @@ class TwilioAddToContactCenter(
             "X-Auth-Token": os.environ.get("PORTAL_AUTH_TOKEN"),
             "X-User-Id": os.environ.get("PORTAL_USER_ID"),
         }
-
+        print("Action Input >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" ,action_input.user_input)
         success, response_message = await add_to_contact_center(
             server_url,
             headers,
