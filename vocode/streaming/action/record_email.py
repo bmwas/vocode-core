@@ -7,6 +7,7 @@ from vocode.streaming.action.base_action import BaseAction
 from vocode.streaming.models.actions import ActionConfig, ActionInput, ActionOutput
 
 EMAIL_REGEX = r"^(?!\.)(?!.*\.\.)[a-zA-Z0-9._%+-]+(?<!\.)@(?![.])[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+NAME_REGEX = r"^[a-zA-Z ,.'-]+$"
 
 
 class RecordEmailVocodeActionConfig(ActionConfig, type="action_record_email"):  # type: ignore
@@ -14,20 +15,27 @@ class RecordEmailVocodeActionConfig(ActionConfig, type="action_record_email"):  
 
 
 class RecordEmailParameters(BaseModel):
-    descriptor: str = Field("A human readable descriptor; eg 'The user's email.'")
+    descriptor: str = Field("A human-readable descriptor; e.g., 'The user's name and email.'")
     raw_value: str = Field(
         ...,
         description="The raw value parsed from the transcript.",
     )
-
-    formatted_value: str = Field(
+    formatted_name: str = Field(
         ...,
-        description="The estimated FORMATTED value of the email.",
+        description="The estimated formatted value of the name.",
+    )
+    formatted_email: str = Field(
+        ...,
+        description="The estimated formatted value of the email.",
     )
 
 
 class RecordEmailResponse(BaseModel):
     success: bool
+    name_success: bool
+    email_success: bool
+    name: Optional[str] = None
+    email: Optional[str] = None
     message: Optional[str] = None
 
 
@@ -38,14 +46,15 @@ class RecordEmail(
         RecordEmailResponse,
     ]
 ):
-    description: str = """Attempts to record an email from the transcript.
+    description: str = """Attempts to record a name and email from the transcript.
 
-    You must format the value to match the field type, eg
+    You must format the values to match the field types, e.g.:
 
-    kian at g mail dot com -> kian@gmail.com
-    ajay at vocode dot dev -> ajay@vocode.dev
+    'My name is John Doe and my email is john dot doe at example dot com' ->
+    formatted_name: 'John Doe'
+    formatted_email: 'john.doe@example.com'
 
-    This function will do extra validation.
+    This function will perform extra validation.
     """
     parameters_type: Type[RecordEmailParameters] = RecordEmailParameters
     response_type: Type[RecordEmailResponse] = RecordEmailResponse
@@ -63,14 +72,27 @@ class RecordEmail(
     def _validate_email(self, email: str) -> bool:
         return bool(re.match(EMAIL_REGEX, email))
 
+    def _validate_name(self, name: str) -> bool:
+        return bool(re.match(NAME_REGEX, name))
+
     async def run(
         self, action_input: ActionInput[RecordEmailParameters]
     ) -> ActionOutput[RecordEmailResponse]:
-        value = action_input.params.formatted_value
+        name = action_input.params.formatted_name
+        email = action_input.params.formatted_email
 
-        success = self._validate_email(value)
+        name_success = self._validate_name(name)
+        email_success = self._validate_email(email)
+
+        success = name_success and email_success
 
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=RecordEmailResponse(success=success),
+            response=RecordEmailResponse(
+                success=success,
+                name_success=name_success,
+                email_success=email_success,
+                name=name if name_success else None,
+                email=email if email_success else None,
+            ),
         )
