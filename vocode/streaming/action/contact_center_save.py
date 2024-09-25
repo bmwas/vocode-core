@@ -26,7 +26,6 @@ class AddToContactCenterEmptyParameters(BaseModel):
 
 
 class AddToContactCenterRequiredParameters(BaseModel):
-    phone_number: str = Field(..., description="The phone number of the caller")
     caller_name: str = Field(..., description="The name of the caller")
     email_address: str = Field(..., description="The email address of the caller")
 
@@ -41,25 +40,15 @@ class AddToContactCenterResponse(BaseModel):
     message: Optional[str] = None
 
 
-class AddToContactCenterVocodeActionConfig(VocodeActionConfig, type="action_add_to_contact_center"):  # type: ignore
-    phone_number: Optional[str] = Field(
-        None, description="The phone number of the caller"
-    )
+class AddToContactCenterVocodeActionConfig(
+    VocodeActionConfig, type="action_add_to_contact_center"
+):  # type: ignore
     caller_name: Optional[str] = Field(
         None, description="The name of the caller"
     )
     email_address: Optional[str] = Field(
         None, description="The email address of the caller"
     )
-
-    def get_phone_number(self, input: ActionInput) -> str:
-        if isinstance(input.params, AddToContactCenterRequiredParameters):
-            return input.params.phone_number
-        elif isinstance(input.params, AddToContactCenterEmptyParameters):
-            assert self.phone_number, "phone number must be set"
-            return self.phone_number
-        else:
-            raise TypeError("Invalid input params type")
 
     def get_caller_name(self, input: ActionInput) -> str:
         if isinstance(input.params, AddToContactCenterRequiredParameters):
@@ -82,7 +71,9 @@ class AddToContactCenterVocodeActionConfig(VocodeActionConfig, type="action_add_
     def action_attempt_to_string(self, input: ActionInput) -> str:
         return f"Attempting to add contact to contact center"
 
-    def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
+    def action_result_to_string(
+        self, input: ActionInput, output: ActionOutput
+    ) -> str:
         assert isinstance(output.response, AddToContactCenterResponse)
         if output.response.success:
             action_description = "Successfully added contact to contact center"
@@ -97,18 +88,20 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
-async def add_to_contact_center(server_url, headers, phone, caller_name, email_address):
+async def add_to_contact_center(
+    server_url, headers, phone, caller_name, email_address
+):
     # Normalize phone number
-    if not phone.startswith('+') and not phone.startswith('1'):
-        phone = '+1' + phone
-    elif phone.startswith('1'):
-        phone = '+' + phone
+    if not phone.startswith("+") and not phone.startswith("1"):
+        phone = "+1" + phone
+    elif phone.startswith("1"):
+        phone = "+" + phone
     else:
         phone = phone
 
     logger.debug(f"Normalized Phone Number: {phone}")
 
-    params = {'phone': phone}
+    params = {"phone": phone}
 
     try:
         async with AsyncRequestor().get_session() as session:
@@ -119,14 +112,16 @@ async def add_to_contact_center(server_url, headers, phone, caller_name, email_a
                 params=params,
             ) as r_search:
                 if r_search.status != 200:
+                    print(f"Failed to reach contact center >>>>>>>>>>>>>>{r_search.status} {r_search.reason}")
                     logger.error(
                         f"Failed to search contact: {r_search.status} {r_search.reason}"
                     )
                     cnt = []
                 else:
                     r_search_json = await r_search.json()
-                    cnt = r_search_json.get('contact', [])
+                    cnt = r_search_json.get("contact", [])
     except Exception as e:
+        print(f"There's ane error>>>>>>>>>>>>>> Exception during contact search: {e} ")
         logger.error(f"Exception during contact search: {e}")
         cnt = []
 
@@ -180,11 +175,7 @@ class TwilioAddToContactCenter(
 
     @property
     def parameters_type(self) -> Type[AddToContactCenterParameters]:
-        if (
-            self.action_config.phone_number
-            and self.action_config.caller_name
-            and self.action_config.email_address
-        ):
+        if self.action_config.caller_name and self.action_config.email_address:
             return AddToContactCenterEmptyParameters
         else:
             return AddToContactCenterRequiredParameters
@@ -203,9 +194,37 @@ class TwilioAddToContactCenter(
     async def run(
         self, action_input: ActionInput[AddToContactCenterParameters]
     ) -> ActionOutput[AddToContactCenterResponse]:
-        phone_number = self.action_config.get_phone_number(action_input)
         caller_name = self.action_config.get_caller_name(action_input)
         email_address = self.action_config.get_email_address(action_input)
+
+        # Extract phone number from Twilio using twilio_call_sid
+        twilio_call_sid = self.get_twilio_sid(action_input)
+        logger.debug(f"Twilio Call SID: {twilio_call_sid}")
+
+        twilio_client = self.conversation_state_manager.create_twilio_client()
+
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_client.get_telephony_config().account_sid}/Calls/{twilio_call_sid}.json"
+
+        async with AsyncRequestor().get_session() as session:
+            async with session.get(url, auth=twilio_client.auth) as response:
+                if response.status != 200:
+                    logger.error(
+                        f"Failed to get call details: {response.status} {response.reason}"
+                    )
+                    success = False
+                    message = "Failed to get caller details"
+                    return ActionOutput(
+                        action_type=action_input.action_config.type,
+                        response=AddToContactCenterResponse(
+                            success=success, message=message
+                        ),
+                    )
+                else:
+                    call_details = await response.json()
+                    logger.debug(f"Call Details: {call_details}")
+
+        phone_number = call_details.get("from", "")
+        logger.debug(f"Extracted Phone Number: {phone_number}")
 
         sanitized_phone_number = sanitize_phone_number(phone_number)
 
@@ -216,7 +235,7 @@ class TwilioAddToContactCenter(
             "X-User-Id": os.environ.get("PORTAL_USER_ID"),
         }
 
-        success, response = await add_to_contact_center(
+        success, response_message = await add_to_contact_center(
             server_url,
             headers,
             sanitized_phone_number,
@@ -226,5 +245,7 @@ class TwilioAddToContactCenter(
 
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=AddToContactCenterResponse(success=success, message=str(response)),
+            response=AddToContactCenterResponse(
+                success=success, message=str(response_message)
+            ),
         )
