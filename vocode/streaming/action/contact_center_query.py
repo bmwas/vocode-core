@@ -216,6 +216,10 @@ async def query_contact_center(server_url, headers, phone, name=None, email_addr
                 else:
                     contact_data['visitorEmails'] = []
 
+                # Log the creation data
+                logger.info("Creating new contact with the following data:")
+                logger.info(contact_data)
+
                 async with session.post(
                     f'{server_url}/api/v1/omnichannel/contact',
                     headers=headers,
@@ -243,6 +247,9 @@ async def query_contact_center(server_url, headers, phone, name=None, email_addr
                 if email_addresses:
                     update_data['visitorEmails'] = [{'address': email} for email in email_addresses]
                 if update_data:
+                    # Log when the contact edit is called and the data being sent
+                    logger.info(f"Updating contact {contact_id} with the following data:")
+                    logger.info(update_data)
                     async with session.put(
                         f'{server_url}/api/v1/omnichannel/contact/{contact_id}',
                         headers=headers,
@@ -252,8 +259,10 @@ async def query_contact_center(server_url, headers, phone, name=None, email_addr
                             logger.error(f"Failed to update contact: {r_update.status} {r_update.reason}")
                         else:
                             logger.info(f"Contact {contact_id} updated successfully.")
+                else:
+                    logger.info(f"No update data provided for contact {contact_id}. Skipping update.")
+
                 # Retrieve the updated contact information
-                # Corrected the endpoint and added error handling
                 async with session.get(
                     f'{server_url}/api/v1/omnichannel/contact',
                     headers=headers,
