@@ -47,10 +47,13 @@ class GetPhoneAndQueryContactCenterAction(
     ]
 ):
     description: str = """
-    Queries caller information such as; name, phone number, and email addresses
+    Queries caller information such as; name, phone number, and email addresses. 
+    Use this if faced with ANY of these scenarios.
+    1) IF you've received a new call
+    2) IF at any point you do not know the caller's personal information i.e. name, address and email address or if any of their personal information is marked as EMPTY
+    3) IF a caller is wondering why you called them earlier or say they're returning your call
     Query user name, phone, address and email if this is a new call
-    Query should be used at the beginning of a call, if a caller is returning a call 
-    Query or search for caller info if caller is returning your call or if you have just received their call.
+    4) Preferrably to use this at the beginning of every call.
     """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
