@@ -78,12 +78,12 @@ class AddToContactCenterVocodeActionConfig(
         if output.response.success:
             action_description = "Successfully added contact to contact center"
         else:
-            action_description = f"Failed to add contact: {output.response.message}"
+            action_description = f"Failed to add contact to contact center - notify manager: {output.response.message}"
         return action_description
 
 
 FUNCTION_DESCRIPTION = "Adds or saves every caller's information (i.e. name, phone number and email address) to the contact center"
-QUIET = True
+QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 

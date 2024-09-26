@@ -169,7 +169,6 @@ class GetPhoneAndQueryContactCenterAction(
         )
 
 
-## Function that queries a contact center given a phone number.
 async def query_contact_center(server_url, headers, phone):
     # Normalize the phone number
     if phone.startswith('+'):
@@ -209,13 +208,15 @@ async def query_contact_center(server_url, headers, phone):
                             "email_addresses": "EMPTY"
                         }
                     else:
-                        # Extract email addresses, assuming 'visitorEmails' is a list of dicts
+                        # Extract email addresses, using 'address' as the key
                         visitor_emails = contact.get('visitorEmails', [])
                         if isinstance(visitor_emails, list):
-                            # Extract 'email' field from each dict if exists
-                            email_addresses = [email.get('email') for email in visitor_emails if 'email' in email]
+                            # Extract 'address' field from each dict if exists
+                            email_addresses_list = [email.get('address') for email in visitor_emails if 'address' in email]
+                            # Convert the list to a comma-separated string
+                            email_addresses = ", ".join(email_addresses_list)
                         else:
-                            email_addresses = []
+                            email_addresses = ""
 
                         contact_info = {
                             "name": contact.get('name', 'EMPTY') or "EMPTY",
