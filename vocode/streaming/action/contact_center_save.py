@@ -91,7 +91,7 @@ SHOULD_RESPOND: Literal["always"] = "always"
 
 
 async def add_to_contact_center(
-    server_url, headers, phone, caller_name, email_address
+    server_url, headers, phone, caller_name=None, email_address=None
 ):
     # Normalize phone number
     if not phone.startswith("+") and not phone.startswith("1"):
@@ -117,13 +117,13 @@ async def add_to_contact_center(
                     logger.error(
                         f"Failed to search contact: {r_search.status} {r_search.reason}"
                     )
-                    cnt = []
+                    cnt = {}
                 else:
                     r_search_json = await r_search.json()
-                    cnt = r_search_json.get("contact", [])
+                    cnt = r_search_json.get("contact", {})
     except Exception as e:
         logger.error(f"Exception during contact search: {e}")
-        cnt = []
+        cnt = {}
 
     if not cnt:
         # Create a random id and token
@@ -158,9 +158,38 @@ async def add_to_contact_center(
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
     else:
-        logger.debug("Contact already exists")
-        return True, {"message": "Contact already exists"}
+        logger.debug("Contact already exists, updating contact")
+        contact_id = cnt.get("_id")
 
+        # Build data with only the fields provided (excluding phone number)
+        data = {}
+        if caller_name is not None:
+            data["name"] = caller_name
+        if email_address is not None:
+            data["email"] = email_address
+
+        if not data:
+            logger.debug("No fields to update")
+            return True, {"message": "No fields to update"}
+
+        try:
+            async with AsyncRequestor().get_session() as session:
+                async with session.put(
+                    f"{server_url}/api/v1/omnichannel/contact/{contact_id}",
+                    headers=headers,
+                    data=json.dumps(data),
+                ) as r_update:
+                    if r_update.status != 200:
+                        logger.error(
+                            f"Failed to update contact: {r_update.status} {r_update.reason}"
+                        )
+                        return False, "Unable to update contact"
+                    else:
+                        logger.debug("Contact updated successfully")
+                        return True, {"message": "Contact updated successfully"}
+        except Exception as e:
+            logger.error(f"Exception during contact update: {e}")
+            return False, f"Exception occurred: {e}"
 
 class TwilioAddToContactCenter(
     TwilioPhoneConversationAction[
