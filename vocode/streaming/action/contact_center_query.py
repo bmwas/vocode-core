@@ -253,9 +253,11 @@ async def query_contact_center(server_url, headers, phone, name=None, email_addr
                         else:
                             logger.info(f"Contact {contact_id} updated successfully.")
                 # Retrieve the updated contact information
+                # Corrected the endpoint and added error handling
                 async with session.get(
-                    f'{server_url}/api/v1/omnichannel/contact/{contact_id}',
-                    headers=headers
+                    f'{server_url}/api/v1/omnichannel/contact',
+                    headers=headers,
+                    params={'contactId': contact_id}
                 ) as r_get_contact:
                     if r_get_contact.status != 200:
                         logger.error(f"Failed to retrieve contact after update: {r_get_contact.status} {r_get_contact.reason}")
@@ -265,20 +267,29 @@ async def query_contact_center(server_url, headers, phone, name=None, email_addr
                             "email_addresses": ", ".join(email_addresses) if email_addresses else "EMPTY"
                         }
                     else:
-                        contact_json = await r_get_contact.json()
-                        contact = contact_json.get('contact', {})
-                        # Extract email addresses
-                        visitor_emails = contact.get('visitorEmails', [])
-                        if isinstance(visitor_emails, list):
-                            email_addresses_list = [email.get('address') for email in visitor_emails if 'address' in email]
-                            email_addresses_str = ", ".join(email_addresses_list)
+                        content_type = r_get_contact.headers.get('Content-Type', '')
+                        if 'application/json' not in content_type:
+                            logger.error(f"Unexpected Content-Type: {content_type}")
+                            contact_info = {
+                                "name": name or "EMPTY",
+                                "phone_number": normalized_phone,
+                                "email_addresses": ", ".join(email_addresses) if email_addresses else "EMPTY"
+                            }
                         else:
-                            email_addresses_str = "EMPTY"
-                        contact_info = {
-                            "name": contact.get('name', 'EMPTY'),
-                            "phone_number": normalized_phone,
-                            "email_addresses": email_addresses_str if email_addresses_str else "EMPTY"
-                        }
+                            contact_json = await r_get_contact.json()
+                            contact = contact_json.get('contact', {})
+                            # Extract email addresses
+                            visitor_emails = contact.get('visitorEmails', [])
+                            if isinstance(visitor_emails, list):
+                                email_addresses_list = [email.get('address') for email in visitor_emails if 'address' in email]
+                                email_addresses_str = ", ".join(email_addresses_list)
+                            else:
+                                email_addresses_str = "EMPTY"
+                            contact_info = {
+                                "name": contact.get('name', 'EMPTY'),
+                                "phone_number": normalized_phone,
+                                "email_addresses": email_addresses_str if email_addresses_str else "EMPTY"
+                            }
     except Exception as e:
         logger.error(f"Exception during contact search or update: {e}")
         contact_info = {
