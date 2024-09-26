@@ -46,56 +46,24 @@ class RecordEmail(
         RecordEmailResponse,
     ]
 ):
-    description: str = """ Attempts to extract and record the caller's full name and email address from the transcript.
-    **Requirements:**
-    - **Formatted Name (formatted_name):**
-    - Should be the caller's full name in proper case.
-    - Must exclude any extra words or phrases not part of the name.
-    - Examples of correct formatting:
-    - "John Doe"
-    - "Alice O'Hara"
-    - "Dr. Emily Clark" (if titles are appropriate in your context)
-    - **Formatted Email (`formatted_email`):**
-    - Should be a valid email address formatted according to standard email conventions.
-    - Must convert spoken representations to standard email format.
-    - Examples of conversions:
-    - "john dot doe at example dot com" → "john.doe@example.com"
-    - "alice underscore smith at mail dot co dot uk" → "alice_smith@mail.co.uk"
-    **Instructions:**
-    1. **Parse the Raw Value:**
-    - Extract both the name and email address from the `raw_value` provided in the transcript.
-    - Handle variations in how people might state their name and email.
-    2. **Format the Values:**
-    - **Name:**
-     - Capitalize appropriately.
-     - Remove any fillers or non-name words.
-    - **Email:**
-     - Replace words like "at" with "@" and "dot" with ".".
-     - Remove any spaces and ensure all characters are in the correct places.
-    3. **Validation:**
-    - **Name Validation:**
-     - Check that the name contains only valid characters (letters, hyphens, apostrophes, spaces).
-     - Ensure the name is not empty and appears to be a real name.
-    - **Email Validation:**
-     - Use standard email regex patterns to validate the email structure.
-     - Ensure there are no invalid characters or formatting issues.
-    4. **Error Handling:**
-    - If validation fails for either field, set the corresponding success flag to `False`.
-    - Provide meaningful messages to indicate why the validation failed.
-    **Examples:**
-    - **Example 1:**
-    - *Transcript:* "My name is John Doe and my email is J as in John, O as in Orange, H as in Honey and N as in New at example dot com that is - john dot doe at example dot com."
-    - *Formatted Name:* "John Doe"
-    - *Formatted Email:* "john.doe@example.com"
-    - **Example 2:**
-    - *Transcript:* "You can reach me at jane-smith at mail dot net. I'm Jane Smith."
-    - *Formatted Name:* "Jane Smith"
-    - *Formatted Email:* "jane-smith@mail.net"  
-    - **Example 3:**
-    - *Transcript:* "This is Dr. Emily Clark, email me at e-c-l-a-r-k at university dot edu"
-    - *Formatted Name:* "Dr. Emily Clark"
-    - *Formatted Email:* "eclark@university.edu"
-    """
+    description: str = """
+Attempts to extract and record the caller's full name and email address from the transcript.
+Requirements:
+- **formatted_name**: The caller's full name, properly capitalized and free of extraneous words.
+  - Example: 'John Doe'
+- **formatted_email**: A valid email address, correctly formatted.
+  - Converts spoken formats like 'john dot doe at example dot com' to 'john.doe@example.com'  or 'b as in Big, I as in India, g as in Golf at gmail dot com' to 'big@gmail.com'
+
+Instructions:
+
+1. **Parse `raw_value`** to extract both the name and email address.
+2. **Format the values** to meet the requirements:
+   - Replace spoken words like 'dot' with '.' and 'at' with '@' in emails.
+   - Capitalize names appropriately.
+3. **Validate** the formatted name and email using standard patterns.
+4. **Return** success flags and the validated `formatted_name` and `formatted_email`.
+Note: This function performs extra validation to ensure the accuracy of the extracted information.
+"""
 
     parameters_type: Type[RecordEmailParameters] = RecordEmailParameters
     response_type: Type[RecordEmailResponse] = RecordEmailResponse
