@@ -54,6 +54,7 @@ class GetPhoneAndQueryContactCenterAction(
     3) IF a caller is wondering why you called them earlier or say they're returning your call
     Query user name, phone, address and email if this is a new call
     4) Preferrably to use this at the beginning of every call.
+    5) IF any of caller's information has been corrected or changed  use it to update or edit the information in the contact center
     """
     response_type: Type[QueryContactCenterResponse] = QueryContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
