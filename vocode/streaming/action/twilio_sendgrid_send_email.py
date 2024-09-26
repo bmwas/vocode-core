@@ -77,7 +77,8 @@ class SendEmailVocodeActionConfig(VocodeActionConfig, type="action_send_email"):
             return "Failed to send email"
 
 
-FUNCTION_DESCRIPTION = """Sends provider a survey form link during an ongoing call ..."""
+FUNCTION_DESCRIPTION = """Sends a personalized survey email to a specified recipient using Twilio SendGrid during an active voice call. 
+Invoked when the caller requests a provider survey link, ..."""
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
