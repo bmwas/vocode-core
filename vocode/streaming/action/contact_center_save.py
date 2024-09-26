@@ -82,8 +82,11 @@ class AddToContactCenterVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = f"""Create, add, edit, update, save a caller's personal information (i.e. name, phone number and email address).
-Use at any point during an ongoing call to create or edit caller's personal information in the contact center"""
+FUNCTION_DESCRIPTION = f"""Used in the following scenarios:
+1) Create or add a new caller's contact or personal information (i.e. name, address and email address)
+2) Update or edit an existing caller's personal information i.e. when a caller corrects their personal information for example, if email on file was abc@gmail.com but caller corrected it to jhn@gmail.com
+3) Used at any point in an ongoing call to create a new contact or edit/update an existing contact with new information.
+"""
 
 QUIET = False
 IS_INTERRUPTIBLE = False
