@@ -48,6 +48,7 @@ class RecordEmail(
 ):
     description: str = """
 Attempts to extract and record the caller's full name and email address from the transcript.
+You MUST use this if any of the caller's information changes or it's updated during the call.
 Requirements:
 - **formatted_name**: The caller's full name, properly capitalized and free of extraneous words.
   - Example: 'John Doe'
