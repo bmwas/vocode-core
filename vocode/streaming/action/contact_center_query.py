@@ -142,16 +142,11 @@ class GetPhoneAndQueryContactCenterAction(
         if contact_info.get("name") != "EMPTY":
             success = True
             email_addresses = contact_info.get('email_addresses')
-            if isinstance(email_addresses, list):
-                # Ensure all items are strings
-                email_addresses_str = ', '.join([str(email) for email in email_addresses]) if email_addresses else "EMPTY"
-            else:
-                email_addresses_str = "EMPTY"
             # Structured message string for easy parsing by the agent
             agent_message = (
                 f"Caller name is {contact_info.get('name')}, "
                 f"phone number is {contact_info.get('phone_number')}, "
-                f"and email address is {email_addresses_str}."
+                f"and email address is {contact_info.get('email_addresses')}."
             )
             message = {
                 "result": {"success": True},
@@ -168,7 +163,9 @@ class GetPhoneAndQueryContactCenterAction(
             response=QueryContactCenterResponse(success=success, result=message),
         )
 
-
+"""
+Function to make a get query to contact center with phone number as an input
+"""
 async def query_contact_center(server_url, headers, phone):
     # Normalize the phone number
     if phone.startswith('+'):
@@ -230,6 +227,5 @@ async def query_contact_center(server_url, headers, phone):
             "phone_number": "EMPTY",
             "email_addresses": "EMPTY"
         }
-
     logger.debug(f"Final Contact Info: {contact_info}")
     return contact_info
