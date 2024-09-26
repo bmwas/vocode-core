@@ -217,7 +217,7 @@ async def query_contact_center(server_url, headers, phone):
                             email_addresses = ", ".join(email_addresses_list)
                         else:
                             email_addresses = ""
-
+                            
                         contact_info = {
                             "name": contact.get('name', 'EMPTY') or "EMPTY",
                             "phone_number": normalized_phone,
@@ -230,6 +230,5 @@ async def query_contact_center(server_url, headers, phone):
             "phone_number": "EMPTY",
             "email_addresses": "EMPTY"
         }
-
     logger.debug(f"Final Contact Info: {contact_info}")
     return contact_info
