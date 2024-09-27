@@ -32,6 +32,7 @@ class DetermineTimeOfDay(
 ):
     description: str = """
 Determine the time of day (morning, afternoon, evening, night) based on the current server time in the America/Chicago timezone.
+Called at the start of a call or at any point in the call as necessary
 Requirements:
 - **time_of_day**: A string representing the current time of day, one of "morning", "afternoon", "evening", or "night".
 Instructions:
