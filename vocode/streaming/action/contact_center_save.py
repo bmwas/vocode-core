@@ -97,16 +97,6 @@ SHOULD_RESPOND: Literal["always"] = "always"
 async def add_to_contact_center(
     server_url, headers, phone, caller_name=None, email_address=None
 ):
-    # Normalize phone number
-    if not phone.startswith("+") and not phone.startswith("1"):
-        phone = "+1" + phone
-    elif phone.startswith("1"):
-        phone = "+" + phone
-    else:
-        phone = phone
-
-    logger.debug(f"Normalized Phone Number: {phone}")
-
     params = {"phone": phone}
 
     try:
@@ -176,6 +166,8 @@ async def add_to_contact_center(
             data["name"] = caller_name
         if email_address is not None:
             data["email"] = email_address
+        if phone is not None:
+            data["phone"] = phone
 
         if len(data) <= 2:  # Only _id and token are present
             logger.debug("No fields to update")
