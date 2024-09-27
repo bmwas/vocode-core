@@ -132,7 +132,20 @@ def normalize_phone_number(phone):
 async def add_to_contact_center(
     server_url, headers, phone, caller_name=None, email_address=None
 ):
-    # Normalize phone number
+    """
+    Adds or updates a contact in the contact center.
+
+    Parameters:
+        server_url (str): The base URL of the contact center server.
+        headers (dict): HTTP headers for the requests.
+        phone (str): The phone number of the contact.
+        caller_name (str, optional): The name of the caller.
+        email_address (str, optional): The email address of the contact.
+
+    Returns:
+        tuple: (bool, dict or str) indicating success status and response or error message.
+    """
+    # Step 1: Normalize phone number
     try:
         phone = normalize_phone_number(phone)
     except ValueError as ve:
@@ -141,120 +154,113 @@ async def add_to_contact_center(
 
     logger.debug(f"Normalized Phone Number: {phone}")
 
-    params = {"phone": phone}
+    # Step 2: Search for existing contact by phone number
+    params_search = {"phone": phone}
 
     try:
         async with ClientSession() as session:
-            # Search for existing contact
             async with session.get(
                 f"{server_url}/api/v1/omnichannel/contact.search",
                 headers=headers,
-                params=params,
-            ) as r_search:
-                if r_search.status != 200:
+                params=params_search,
+            ) as response_search:
+                if response_search.status != 200:
                     logger.error(
-                        f"Failed to search contact: {r_search.status} {r_search.reason}"
+                        f"Failed to search contact: {response_search.status} {response_search.reason}"
                     )
-                    cnt = {}
+                    search_result = {}
                 else:
-                    r_search_json = await r_search.json()
-                    cnt = r_search_json.get("contact", {})
+                    search_json = await response_search.json()
+                    search_result = search_json.get("contact", {})
     except Exception as e:
         logger.error(f"Exception during contact search: {e}")
-        cnt = {}
+        search_result = {}
 
-    if not cnt:
-        # Create a random id and token
-        token = secrets.token_urlsafe(22)
+    if not search_result:
+        # Step 3: Create a new contact since it does not exist
+        logger.debug("No existing contact found. Proceeding to create a new contact.")
+
+        # Generate a random _id and token
         _id = secrets.token_urlsafe(17)
-        data = {
+        token = secrets.token_urlsafe(22)
+        data_create = {
             "_id": _id,
             "token": token,
             "phone": phone,
             "name": caller_name,
             "email": email_address,
         }
-        logger.debug(f"Data to send: {data}")
+
+        logger.debug(f"Data to send for creating contact: {data_create}")
+
         try:
             async with ClientSession() as session:
                 async with session.post(
                     f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
-                    data=json.dumps(data),
-                ) as r_add:
-                    if r_add.status != 200:
+                    data=json.dumps(data_create),
+                ) as response_create:
+                    if response_create.status != 200:
                         logger.error(
-                            f"Failed to add contact: {r_add.status} {r_add.reason}"
+                            f"Failed to add contact: {response_create.status} {response_create.reason}"
                         )
                         return False, "Unable to add contact"
                     else:
-                        logger.debug("Contact added successfully")
-                        c_response = {"token": token, "_id": _id}
-                        return True, c_response
+                        logger.debug("Contact added successfully.")
+                        response_json = await response_create.json()
+                        # Assuming the API returns the created contact details
+                        return True, response_json
         except Exception as e:
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
     else:
-        logger.debug("Contact already exists, updating contact")
-        contact_id = cnt.get("_id")
+        # Step 4: Update the existing contact
+        logger.debug("Contact already exists. Proceeding to update the contact.")
+
+        contact_id = search_result.get("_id")
+        token = search_result.get("token")
+
         if not contact_id:
-            logger.error("Contact ID not found in contact search result")
-            return False, "Contact ID not found"
+            logger.error("Contact ID not found in search result.")
+            return False, "Contact ID not found in search result."
 
-        # Get token using /api/v1/livechat/visitors.info?visitorId=_id
-        try:
-            params = {'visitorId': contact_id}
-            async with ClientSession() as session:
-                async with session.get(
-                    f"{server_url}/api/v1/livechat/visitors.info",
-                    headers=headers,
-                    params=params,
-                ) as r_info:
-                    if r_info.status != 200:
-                        logger.error(
-                            f"Failed to get visitor info: {r_info.status} {r_info.reason}"
-                        )
-                        return False, "Unable to get visitor info"
-                    else:
-                        r_info_json = await r_info.json()
-                        token = r_info_json.get('visitor', {}).get('token')
-                        if not token:
-                            logger.error("Token not found in visitor info")
-                            return False, "Token not found in visitor info"
-        except Exception as e:
-            logger.error(f"Exception during getting visitor info: {e}")
-            return False, f"Exception occurred: {e}"
+        if not token:
+            logger.error("Token not found in search result.")
+            return False, "Token not found in search result."
 
-        # Build data with required fields
-        data = {
+        # Prepare the data payload for updating
+        data_update = {
             "_id": contact_id,
             "token": token,
             "name": caller_name,
-            "phone": phone,
             "email": email_address,
+            # Exclude 'phone' from update as per requirements
         }
 
-        logger.debug(f"Data to send for update: {data}")
+        logger.debug(f"Data to send for updating contact: {data_update}")
 
         try:
             async with ClientSession() as session:
                 async with session.post(
                     f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
-                    data=json.dumps(data),
-                ) as r_update:
-                    if r_update.status != 200:
+                    data=json.dumps(data_update),
+                ) as response_update:
+                    if response_update.status != 200:
                         logger.error(
-                            f"Failed to update contact: {r_update.status} {r_update.reason}"
+                            f"Failed to update contact: {response_update.status} {response_update.reason}"
                         )
                         return False, "Unable to update contact"
                     else:
-                        logger.debug("Contact updated successfully")
-                        return True, {"message": "Contact updated successfully"}
+                        logger.debug("Contact updated successfully.")
+                        response_json = await response_update.json()
+                        # Assuming the API returns the updated contact details or a success message
+                        return True, response_json
         except Exception as e:
             logger.error(f"Exception during contact update: {e}")
             return False, f"Exception occurred: {e}"
-
+        
+        
 class TwilioAddToContactCenter(
     TwilioPhoneConversationAction[
         AddToContactCenterVocodeActionConfig,
