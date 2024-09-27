@@ -164,9 +164,9 @@ async def add_to_contact_center(
                 headers=headers,
                 params=params_search,
             ) as response_search:
-                if response_search.status != 200:
+                if response_search.status_code != 200:
                     logger.error(
-                        f"Failed to search contact: {response_search.status} {response_search.reason}"
+                        f"Failed to search contact: {response_search.status_code} {response_search.reason}"
                     )
                     search_result = {}
                 else:
@@ -200,9 +200,9 @@ async def add_to_contact_center(
                     headers=headers,
                     data=json.dumps(data_create),
                 ) as response_create:
-                    if response_create.status != 200:
+                    if response_create.status_code != 200:
                         logger.error(
-                            f"Failed to add contact: {response_create.status} {response_create.reason}"
+                            f"Failed to add contact: {response_create.status_code} {response_create.reason}"
                         )
                         return False, "Unable to add contact"
                     else:
@@ -246,9 +246,9 @@ async def add_to_contact_center(
                     headers=headers,
                     data=json.dumps(data_update),
                 ) as response_update:
-                    if response_update.status != 200:
+                    if response_update.status_code != 200:
                         logger.error(
-                            f"Failed to update contact: {response_update.status} {response_update.reason}"
+                            f"Failed to update contact: {response_update.status_code} {response_update.reason}"
                         )
                         return False, "Unable to update contact"
                     else:
@@ -260,7 +260,7 @@ async def add_to_contact_center(
             logger.error(f"Exception during contact update: {e}")
             return False, f"Exception occurred: {e}"
         
-        
+
 class TwilioAddToContactCenter(
     TwilioPhoneConversationAction[
         AddToContactCenterVocodeActionConfig,
@@ -306,9 +306,9 @@ class TwilioAddToContactCenter(
 
         async with AsyncRequestor().get_session() as session:
             async with session.get(url, auth=twilio_client.auth) as response:
-                if response.status != 200:
+                if response.status_code != 200:
                     logger.error(
-                        f"Failed to get call details: {response.status} {response.reason}"
+                        f"Failed to get call details: {response.status_code} {response.reason}"
                     )
                     success = False
                     message = "Failed to get caller details"
