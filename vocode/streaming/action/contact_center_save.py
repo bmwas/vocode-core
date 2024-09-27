@@ -20,6 +20,7 @@ import os
 import json
 import secrets
 import re
+from aiohttp import ClientSession  # Ensure this import is present
 
 class AddToContactCenterEmptyParameters(BaseModel):
     pass
@@ -174,7 +175,6 @@ async def add_to_contact_center(
             "email": email_address,
         }
         logger.debug(f"Data to send: {data}")
-
         try:
             async with ClientSession() as session:
                 async with session.post(
@@ -197,7 +197,6 @@ async def add_to_contact_center(
     else:
         logger.debug("Contact already exists, updating contact")
         contact_id = cnt.get("_id")
-
         if not contact_id:
             logger.error("Contact ID not found in contact search result")
             return False, "Contact ID not found"
