@@ -19,7 +19,7 @@ from vocode.streaming.utils.state_manager import (
 import os
 import json
 import secrets
-
+import re
 
 class AddToContactCenterEmptyParameters(BaseModel):
     pass
@@ -94,9 +94,53 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
+
+def normalize_phone_number(phone):
+    """
+    Normalize the phone number to ensure it follows the 10-digit format (e.g., 8323858954).
+
+    Parameters:
+        phone (str): The input phone number.
+
+    Returns:
+        str: The normalized 10-digit phone number.
+
+    Raises:
+        ValueError: If the phone number format is invalid.
+    """
+    # Remove any non-digit characters except '+'
+    phone = re.sub(r"[^\d+]", "", phone)
+    logger.debug(f"Raw Phone Number after removing non-digit characters: {phone}")
+
+    # Case 1: Phone number starts with '+1' followed by 10 digits
+    if re.fullmatch(r"\+1\d{10}", phone):
+        normalized_phone = phone[2:]
+        logger.debug(f"Stripped '+1' from phone number: {normalized_phone}")
+        return normalized_phone
+
+    # Case 2: Phone number starts with '1' followed by 10 digits
+    elif re.fullmatch(r"1\d{10}", phone):
+        normalized_phone = phone[1:]
+        logger.debug(f"Stripped leading '1' from phone number: {normalized_phone}")
+        return normalized_phone
+
+    # Case 3: Phone number has exactly 10 digits
+    elif re.fullmatch(r"\d{10}", phone):
+        logger.debug("Phone number is already in the correct 10-digit format.")
+        return phone
+
+    else:
+        # Handle invalid formats
+        logger.error("Invalid phone number format.")
+        raise ValueError("Invalid phone number format. Please provide a 10-digit number, 11-digit starting with '1', or a properly formatted number with '+1'.")
+
+
+
+
 async def add_to_contact_center(
     server_url, headers, phone, caller_name=None, email_address=None
 ):
+    phone = normalize_phone_number(phone)
     params = {"phone": phone}
 
     try:
