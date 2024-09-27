@@ -20,7 +20,11 @@ import os
 import json
 import secrets
 import re
-from aiohttp import ClientSession  # Ensure this import is present
+
+
+import aiohttp
+from aiohttp import ClientSession
+
 
 class AddToContactCenterEmptyParameters(BaseModel):
     pass
@@ -163,22 +167,89 @@ async def add_to_contact_center(
                 f"{server_url}/api/v1/omnichannel/contact.search",
                 headers=headers,
                 params=params_search,
+                timeout=aiohttp.ClientTimeout(total=10)  # Optional: set a timeout for the request
             ) as response_search:
-                if response_search.status_code != 200:
+                logger.debug(f"Search Contact Response Status Code: {response_search.status} {response_search.reason}")
+                response_text = await response_search.text()
+                logger.debug(f"Search Contact Response Body: {response_text}")
+
+                if 200 <= response_search.status < 300:
+                    try:
+                        search_json = await response_search.json()
+                        search_result = search_json.get("contact", {})
+                        if search_result:
+                            logger.debug(f"Contact found: {search_result}")
+                        else:
+                            logger.debug("No contact found with the given phone number.")
+                    except json.JSONDecodeError:
+                        logger.error("Failed to decode JSON from search contact response.")
+                        search_result = {}
+                else:
                     logger.error(
-                        f"Failed to search contact: {response_search.status_code} {response_search.reason}"
+                        f"Failed to search contact: {response_search.status} {response_search.reason}"
                     )
                     search_result = {}
-                else:
-                    search_json = await response_search.json()
-                    search_result = search_json.get("contact", {})
-    except Exception as e:
+    except aiohttp.ClientError as e:
         logger.error(f"Exception during contact search: {e}")
         search_result = {}
 
-    if not search_result:
-        # Step 3: Create a new contact since it does not exist
-        logger.debug("No existing contact found. Proceeding to create a new contact.")
+    if search_result:
+        # Step 3: Update existing contact
+        logger.debug("Proceeding to update the existing contact.")
+
+        contact_id = search_result.get("_id")
+        token = search_result.get("token")
+
+        if not contact_id:
+            logger.error("Contact ID not found in search result.")
+            return False, "Contact ID not found in search result."
+
+        if not token:
+            logger.error("Token not found in search result.")
+            return False, "Token not found in search result."
+
+        # Prepare the data payload for updating
+        data_update = {
+            "_id": contact_id,
+            "token": token,
+            "name": caller_name,
+            "phone": phone,  # Including 'phone' as per your example
+            "email": email_address,
+        }
+
+        logger.debug(f"Data to send for updating contact: {data_update}")
+
+        try:
+            async with ClientSession() as session:
+                async with session.post(
+                    f"{server_url}/api/v1/omnichannel/contact",
+                    headers=headers,
+                    data=json.dumps(data_update),
+                    timeout=aiohttp.ClientTimeout(total=10)  # Optional: set a timeout for the request
+                ) as response_update:
+                    logger.debug(f"Update Contact Response Status Code: {response_update.status} {response_update.reason}")
+                    response_update_text = await response_update.text()
+                    logger.debug(f"Update Contact Response Body: {response_update_text}")
+
+                    if 200 <= response_update.status < 300:
+                        try:
+                            response_json = await response_update.json()
+                            logger.debug("Contact updated successfully.")
+                            return True, response_json
+                        except json.JSONDecodeError:
+                            logger.error("Failed to decode JSON from update contact response.")
+                            return False, "Contact updated, but failed to parse response."
+                    else:
+                        logger.error(
+                            f"Failed to update contact: {response_update.status} {response_update.reason}"
+                        )
+                        return False, "Unable to update contact"
+        except aiohttp.ClientError as e:
+            logger.error(f"Exception during contact update: {e}")
+            return False, f"Exception occurred: {e}"
+    else:
+        # Step 4: Create new contact
+        logger.debug("Proceeding to create a new contact.")
 
         # Generate a random _id and token
         _id = secrets.token_urlsafe(17)
@@ -199,65 +270,27 @@ async def add_to_contact_center(
                     f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
                     data=json.dumps(data_create),
+                    timeout=aiohttp.ClientTimeout(total=10)  # Optional: set a timeout for the request
                 ) as response_create:
-                    if response_create.status_code != 200:
+                    logger.debug(f"Create Contact Response Status Code: {response_create.status} {response_create.reason}")
+                    response_create_text = await response_create.text()
+                    logger.debug(f"Create Contact Response Body: {response_create_text}")
+
+                    if 200 <= response_create.status < 300:
+                        try:
+                            response_json = await response_create.json()
+                            logger.debug("Contact added successfully.")
+                            return True, response_json
+                        except json.JSONDecodeError:
+                            logger.error("Failed to decode JSON from create contact response.")
+                            return False, "Contact created, but failed to parse response."
+                    else:
                         logger.error(
-                            f"Failed to add contact: {response_create.status_code} {response_create.reason}"
+                            f"Failed to add contact: {response_create.status} {response_create.reason}"
                         )
                         return False, "Unable to add contact"
-                    else:
-                        logger.debug("Contact added successfully.")
-                        response_json = await response_create.json()
-                        # Assuming the API returns the created contact details
-                        return True, response_json
-        except Exception as e:
+        except aiohttp.ClientError as e:
             logger.error(f"Exception during contact addition: {e}")
-            return False, f"Exception occurred: {e}"
-    else:
-        # Step 4: Update the existing contact
-        logger.debug("Contact already exists. Proceeding to update the contact.")
-
-        contact_id = search_result.get("_id")
-        token = search_result.get("token")
-
-        if not contact_id:
-            logger.error("Contact ID not found in search result.")
-            return False, "Contact ID not found in search result."
-
-        if not token:
-            logger.error("Token not found in search result.")
-            return False, "Token not found in search result."
-
-        # Prepare the data payload for updating
-        data_update = {
-            "_id": contact_id,
-            "token": token,
-            "name": caller_name,
-            "email": email_address,
-            # Exclude 'phone' from update as per requirements
-        }
-
-        logger.debug(f"Data to send for updating contact: {data_update}")
-
-        try:
-            async with ClientSession() as session:
-                async with session.post(
-                    f"{server_url}/api/v1/omnichannel/contact",
-                    headers=headers,
-                    data=json.dumps(data_update),
-                ) as response_update:
-                    if response_update.status_code != 200:
-                        logger.error(
-                            f"Failed to update contact: {response_update.status_code} {response_update.reason}"
-                        )
-                        return False, "Unable to update contact"
-                    else:
-                        logger.debug("Contact updated successfully.")
-                        response_json = await response_update.json()
-                        # Assuming the API returns the updated contact details or a success message
-                        return True, response_json
-        except Exception as e:
-            logger.error(f"Exception during contact update: {e}")
             return False, f"Exception occurred: {e}"
         
 
