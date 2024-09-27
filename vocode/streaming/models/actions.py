@@ -63,6 +63,7 @@ class ActionType(str, Enum):
     TWILIO_SENDGRID_SEND_EMAIL = "action_send_email"
     TRANSFER_CALL = "action_transfer_call"
     DTMF = "action_dtmf"
+    TIME_OF_DAY = "action_determine_time_of_day"
 
 
 ParametersType = TypeVar("ParametersType", bound=BaseModel)
