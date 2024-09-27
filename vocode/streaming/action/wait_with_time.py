@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Optional
 
 from pydantic.v1 import BaseModel, Field
 import asyncio
@@ -17,6 +17,14 @@ class WaitTimeParameters(BaseModel):
         ...,
         description="The duration in seconds to wait before the agent responds."
     )
+    initial_message: Optional[str] = Field(
+        default="Okay, I will wait. Please let me know when you're ready.",
+        description="The message the agent says when starting to wait."
+    )
+    timeout_message: Optional[str] = Field(
+        default="Hello, are you still there?",
+        description="The message the agent says when the wait time expires."
+    )
 
 
 class WaitTimeResponse(BaseModel):
@@ -31,7 +39,9 @@ class WaitTime(
     ]
 ):
     description: str = (
-        "Use this action to make the agent wait silently for a specified duration (in seconds) before responding."
+        "Use this action to make the agent wait for a specified duration (in seconds). "
+        "When the wait starts, the agent will inform the caller with an initial message. "
+        "After the wait time expires, the agent will prompt the caller with a timeout message."
     )
     parameters_type: Type[WaitTimeParameters] = WaitTimeParameters
     response_type: Type[WaitTimeResponse] = WaitTimeResponse
@@ -42,13 +52,24 @@ class WaitTime(
     ):
         super().__init__(
             action_config,
-            quiet=True,
-            should_respond="never",
+            quiet=False,
+            should_respond="always",
         )
 
     async def run(self, action_input: ActionInput[WaitTimeParameters]) -> ActionOutput[WaitTimeResponse]:
         duration = action_input.params.duration_seconds
+        initial_message = action_input.params.initial_message
+        timeout_message = action_input.params.timeout_message
+
+        # Send initial message to the caller
+        await self.send_agent_message(initial_message)
+
+        # Wait for the specified duration
         await asyncio.sleep(duration)
+
+        # Send timeout message to the caller
+        await self.send_agent_message(timeout_message)
+
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=WaitTimeResponse(success=True),
