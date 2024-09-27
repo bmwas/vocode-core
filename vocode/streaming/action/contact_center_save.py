@@ -97,7 +97,7 @@ SHOULD_RESPOND: Literal["always"] = "always"
 
 def normalize_phone_number(phone):
     """
-    Normalize the phone number to ensure it follows the 10-digit format (e.g., 8323858954).
+    Normalize the phone number to ensure it is a 10-digit number by stripping '+1' or '1' prefixes.
 
     Parameters:
         phone (str): The input phone number.
@@ -108,43 +108,42 @@ def normalize_phone_number(phone):
     Raises:
         ValueError: If the phone number format is invalid.
     """
-    # Remove any non-digit characters except '+'
-    phone = re.sub(r"[^\d+]", "", phone)
+    # Remove any non-digit characters
+    phone = re.sub(r"[^\d]", "", phone)
     logger.debug(f"Raw Phone Number after removing non-digit characters: {phone}")
 
-    # Case 1: Phone number starts with '+1' followed by 10 digits
-    if re.fullmatch(r"\+1\d{10}", phone):
-        normalized_phone = phone[2:]
-        logger.debug(f"Stripped '+1' from phone number: {normalized_phone}")
-        return normalized_phone
-
-    # Case 2: Phone number starts with '1' followed by 10 digits
-    elif re.fullmatch(r"1\d{10}", phone):
+    # Case 1: Phone number starts with '1' and is 11 digits
+    if re.fullmatch(r"1\d{10}", phone):
         normalized_phone = phone[1:]
-        logger.debug(f"Stripped leading '1' from phone number: {normalized_phone}")
+        logger.debug(f"Phone number starts with '1'. Normalized to: {normalized_phone}")
         return normalized_phone
 
-    # Case 3: Phone number has exactly 10 digits
+    # Case 2: Phone number is exactly 10 digits
     elif re.fullmatch(r"\d{10}", phone):
         logger.debug("Phone number is already in the correct 10-digit format.")
         return phone
 
     else:
-        # Handle invalid formats
+        # Handle invalid formats as needed
         logger.error("Invalid phone number format.")
-        raise ValueError("Invalid phone number format. Please provide a 10-digit number, 11-digit starting with '1', or a properly formatted number with '+1'.")
-
-
-
+        raise ValueError("Invalid phone number format. Please provide a 10-digit number or 11-digit starting with '1'.")
 
 async def add_to_contact_center(
     server_url, headers, phone, caller_name=None, email_address=None
 ):
-    phone = normalize_phone_number(phone)
+    # Normalize phone number
+    try:
+        phone = normalize_phone_number(phone)
+    except ValueError as ve:
+        logger.error(f"Phone normalization error: {ve}")
+        return False, str(ve)
+
+    logger.debug(f"Normalized Phone Number: {phone}")
+
     params = {"phone": phone}
 
     try:
-        async with AsyncRequestor().get_session() as session:
+        async with ClientSession() as session:
             # Search for existing contact
             async with session.get(
                 f"{server_url}/api/v1/omnichannel/contact.search",
@@ -177,7 +176,7 @@ async def add_to_contact_center(
         logger.debug(f"Data to send: {data}")
 
         try:
-            async with AsyncRequestor().get_session() as session:
+            async with ClientSession() as session:
                 async with session.post(
                     f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
@@ -198,28 +197,48 @@ async def add_to_contact_center(
     else:
         logger.debug("Contact already exists, updating contact")
         contact_id = cnt.get("_id")
-        token = cnt.get("token")
 
-        if not token:
-            logger.error("Unable to update, token not found in contact search result")
-            return False, "Unable to updated - token not found"
+        if not contact_id:
+            logger.error("Contact ID not found in contact search result")
+            return False, "Contact ID not found"
+
+        # Get token using /api/v1/livechat/visitors.info?visitorId=_id
+        try:
+            params = {'visitorId': contact_id}
+            async with ClientSession() as session:
+                async with session.get(
+                    f"{server_url}/api/v1/livechat/visitors.info",
+                    headers=headers,
+                    params=params,
+                ) as r_info:
+                    if r_info.status != 200:
+                        logger.error(
+                            f"Failed to get visitor info: {r_info.status} {r_info.reason}"
+                        )
+                        return False, "Unable to get visitor info"
+                    else:
+                        r_info_json = await r_info.json()
+                        token = r_info_json.get('visitor', {}).get('token')
+                        if not token:
+                            logger.error("Token not found in visitor info")
+                            return False, "Token not found in visitor info"
+        except Exception as e:
+            logger.error(f"Exception during getting visitor info: {e}")
+            return False, f"Exception occurred: {e}"
 
         # Build data with required fields
-        data = {"_id": contact_id, "token": token}
-        if caller_name is not None:
-            data["name"] = caller_name
-        if email_address is not None:
-            data["email"] = email_address
-        if phone is not None:
-            data["phone"] = phone
+        data = {
+            "_id": contact_id,
+            "token": token,
+            "name": caller_name,
+            "phone": phone,
+            "email": email_address,
+        }
 
-        if len(data) <= 2:  # Only _id and token are present
-            logger.debug("No fields to update")
-            return True, {"message": "No fields to update"}
         logger.debug(f"Data to send for update: {data}")
 
         try:
-            async with AsyncRequestor().get_session() as session:
+            async with ClientSession() as session:
                 async with session.post(
                     f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
