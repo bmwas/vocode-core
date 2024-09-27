@@ -164,22 +164,29 @@ async def add_to_contact_center(
     else:
         logger.debug("Contact already exists, updating contact")
         contact_id = cnt.get("_id")
+        token = cnt.get("token")
 
-        # Build data with only the fields provided (excluding phone number)
-        data = {}
+        if not token:
+            logger.error("Token not found in contact search result")
+            return False, "Token not found"
+
+        # Build data with required fields
+        data = {"_id": contact_id, "token": token}
         if caller_name is not None:
             data["name"] = caller_name
         if email_address is not None:
             data["email"] = email_address
 
-        if not data:
+        if len(data) <= 2:  # Only _id and token are present
             logger.debug("No fields to update")
             return True, {"message": "No fields to update"}
 
+        logger.debug(f"Data to send for update: {data}")
+
         try:
             async with AsyncRequestor().get_session() as session:
-                async with session.put(
-                    f"{server_url}/api/v1/omnichannel/contact/{contact_id}",
+                async with session.post(
+                    f"{server_url}/api/v1/omnichannel/contact",
                     headers=headers,
                     data=json.dumps(data),
                 ) as r_update:
