@@ -201,8 +201,8 @@ async def add_to_contact_center(
         token = cnt.get("token")
 
         if not token:
-            logger.error("Token not found in contact search result")
-            return False, "Token not found"
+            logger.error("Unable to update, token not found in contact search result")
+            return False, "Unable to updated - token not found"
 
         # Build data with required fields
         data = {"_id": contact_id, "token": token}
@@ -216,7 +216,6 @@ async def add_to_contact_center(
         if len(data) <= 2:  # Only _id and token are present
             logger.debug("No fields to update")
             return True, {"message": "No fields to update"}
-
         logger.debug(f"Data to send for update: {data}")
 
         try:
