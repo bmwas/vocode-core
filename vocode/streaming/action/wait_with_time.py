@@ -1,4 +1,4 @@
-from typing import Type, Optional
+from typing import Type
 
 from pydantic.v1 import BaseModel, Field
 import asyncio
@@ -16,14 +16,6 @@ class WaitTimeParameters(BaseModel):
     duration_seconds: float = Field(
         ...,
         description="The duration in seconds to wait before the agent responds."
-    )
-    initial_message: Optional[str] = Field(
-        default="Okay, I will wait. Please let me know when you're ready.",
-        description="The message the agent says when starting to wait."
-    )
-    timeout_message: Optional[str] = Field(
-        default="Hello, are you still there?",
-        description="The message the agent says when the wait time expires."
     )
 
 
@@ -58,18 +50,7 @@ class WaitTime(
 
     async def run(self, action_input: ActionInput[WaitTimeParameters]) -> ActionOutput[WaitTimeResponse]:
         duration = action_input.params.duration_seconds
-        initial_message = action_input.params.initial_message
-        timeout_message = action_input.params.timeout_message
-
-        # Send initial message to the caller
-        await self.send_agent_message(initial_message)
-
-        # Wait for the specified duration
         await asyncio.sleep(duration)
-
-        # Send timeout message to the caller
-        await self.send_agent_message(timeout_message)
-
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=WaitTimeResponse(success=True),
