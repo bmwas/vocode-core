@@ -309,7 +309,7 @@ class TwilioAddToContactCenter(
         phone_number = call_details.get("from", "")
         logger.debug(f"Extracted Phone Number: {phone_number}")
 
-        sanitized_phone_number = sanitize_phone_number(phone_number)
+        #sanitized_phone_number = sanitize_phone_number(phone_number)
 
         server_url = os.environ.get("PORTAL_URL")
         headers = {
@@ -320,7 +320,7 @@ class TwilioAddToContactCenter(
         success, response_message = await add_to_contact_center(
             server_url,
             headers,
-            sanitized_phone_number,
+            phone_number,
             caller_name,
             email_address,
         )
