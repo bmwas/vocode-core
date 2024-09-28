@@ -24,6 +24,7 @@ import re
 
 import aiohttp
 from aiohttp import ClientSession
+import phonenumbers
 
 
 class AddToContactCenterEmptyParameters(BaseModel):
@@ -99,48 +100,20 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
-
-def normalize_phone_number(phone):
-    """
-    Normalize the phone number to ensure it is a 10-digit number by stripping '+1' or '1' prefixes.
-
-    Parameters:
-        phone (str): The input phone number.
-
-    Returns:
-        str: The normalized 10-digit phone number.
-
-    Raises:
-        ValueError: If the phone number format is invalid.
-    """
-    logger.debug(f"normalize_phone_number called with phone: {phone}")
-    if phone is None:
-        logger.error("Phone number is None.")
-        raise ValueError("Phone number cannot be None.")
-    if not isinstance(phone, str):
-        logger.error(f"Phone number is not a string. Received type: {type(phone)}")
-        raise ValueError("Phone number must be a string.")
-
-    # Remove any non-digit characters
-    phone_digits = re.sub(r"[^\d]", "", phone)
-    logger.debug(f"Raw Phone Number after removing non-digit characters: {phone_digits}")
-
-    # Case 1: Phone number starts with '1' and is 11 digits
-    if re.fullmatch(r"1\d{10}", phone_digits):
-        normalized_phone = phone_digits[1:]
-        logger.debug(f"Phone number starts with '1'. Normalized to: {normalized_phone}")
-        return normalized_phone
-
-    # Case 2: Phone number is exactly 10 digits
-    elif re.fullmatch(r"\d{10}", phone_digits):
-        logger.debug("Phone number is already in the correct 10-digit format.")
-        return phone_digits
-
-    else:
-        # Handle invalid formats as needed
-        logger.error("Invalid phone number format.")
-        raise ValueError("Invalid phone number format. Please provide a 10-digit number or 11-digit starting with '1'.")
-
+def normalize_phone_number(phone_number):
+    try:
+        # Parse the phone number
+        parsed_number = phonenumbers.parse(phone_number, None)
+        
+        # Check if the number is valid
+        if not phonenumbers.is_valid_number(parsed_number):
+            return None
+        # Get the national number (without country code)
+        national_number = str(parsed_number.national_number)
+        return national_number
+    except phonenumbers.phonenumberutil.NumberParseException:
+        # Return None if the number cannot be parsed
+        return phone_number
 
 async def add_to_contact_center(
     session: ClientSession,
