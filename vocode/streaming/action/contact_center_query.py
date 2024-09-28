@@ -15,9 +15,20 @@ from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateMan
 import aiohttp
 
 
-
 class EmptyParameters(BaseModel):
     pass
+
+
+class QueryContactCenterRequiredParameters(BaseModel):
+    direction: Literal["to", "from"] = Field(
+        ..., description="Direction of the call: 'to' or 'from'"
+    )
+
+
+# Define the union of parameter types
+QueryContactCenterParameters = Union[
+    EmptyParameters, QueryContactCenterRequiredParameters
+]
 
 
 class QueryContactCenterResponse(BaseModel):
@@ -40,10 +51,18 @@ class GetPhoneAndQueryContactCenterActionConfig(
         else:
             return "Failed to retrieve contact information"
 
+    def get_direction(self, input: ActionInput) -> str:
+        if isinstance(input.params, QueryContactCenterRequiredParameters):
+            return input.params.direction
+        elif isinstance(input.params, EmptyParameters):
+            raise ValueError("Direction must be provided in parameters")
+        else:
+            raise TypeError("Invalid input params type")
+
 
 class GetPhoneAndQueryContactCenterAction(
     TwilioPhoneConversationAction[
-        GetPhoneAndQueryContactCenterActionConfig, EmptyParameters, QueryContactCenterResponse
+        GetPhoneAndQueryContactCenterActionConfig, QueryContactCenterParameters, QueryContactCenterResponse
     ]
 ):
     description: str = """
@@ -59,8 +78,12 @@ class GetPhoneAndQueryContactCenterAction(
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
-    def parameters_type(self) -> Type[EmptyParameters]:
-        return EmptyParameters
+    def parameters_type(self) -> Type[QueryContactCenterParameters]:
+        # Determine which parameters to use based on the action configuration
+        if hasattr(self.action_config, 'direction'):
+            return QueryContactCenterRequiredParameters
+        else:
+            return EmptyParameters
 
     def __init__(
         self,
@@ -74,8 +97,15 @@ class GetPhoneAndQueryContactCenterAction(
         )
 
     async def run(
-        self, action_input: ActionInput[EmptyParameters]
+        self, action_input: ActionInput[QueryContactCenterParameters]
     ) -> ActionOutput[QueryContactCenterResponse]:
+        # Retrieve direction from parameters if provided
+        if isinstance(action_input.params, QueryContactCenterRequiredParameters):
+            direction = self.action_config.get_direction(action_input)
+        else:
+            # Handle cases where parameters are empty; you might want to set a default or raise an error
+            raise ValueError("Direction must be provided in parameters")
+
         twilio_call_sid = self.get_twilio_sid(action_input)
         logger.debug(f"Twilio Call SID: {twilio_call_sid}")
 
@@ -100,7 +130,8 @@ class GetPhoneAndQueryContactCenterAction(
                     call_details = await response.json()
                     logger.debug(f"Call Details: {call_details}")
 
-        phone_number = call_details.get('from', '')
+        # Use the direction parameter to extract the correct phone number
+        phone_number = call_details.get(direction, '')
         logger.debug(f"Extracted Phone Number: {phone_number}")
 
         if not phone_number:
@@ -162,6 +193,7 @@ class GetPhoneAndQueryContactCenterAction(
             action_type=action_input.action_config.type,
             response=QueryContactCenterResponse(success=success, result=message),
         )
+
 
 """
 Function to make a get query to contact center
