@@ -135,6 +135,7 @@ def normalize_phone_number(phone):
 
 
 
+
 async def add_to_contact_center(
     session: ClientSession,
     server_url: str,
@@ -142,7 +143,7 @@ async def add_to_contact_center(
     phone: str,
     caller_name: str = None,
     email_address: str = None
-) -> (bool, dict or str):
+) -> (bool, dict or str): # type: ignore
     """
     Adds or updates a contact in the contact center.
 
@@ -299,7 +300,6 @@ async def add_to_contact_center(
             return False, f"Exception occurred: {e}"
 
 
-
 class TwilioAddToContactCenter(
     TwilioPhoneConversationAction[
         AddToContactCenterVocodeActionConfig,
@@ -345,9 +345,9 @@ class TwilioAddToContactCenter(
 
         async with AsyncRequestor().get_session() as session:
             async with session.get(url, auth=twilio_client.auth) as response:
-                if response.status_code != 200:
+                if response.status != 200:
                     logger.error(
-                        f"Failed to get call details: {response.status_code} {response.reason}"
+                        f"Failed to get call details: {response.status} {response.reason}"
                     )
                     success = False
                     message = "Failed to get caller details"
