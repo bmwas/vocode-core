@@ -19,12 +19,6 @@ from vocode.streaming.utils.state_manager import (
 import os
 import json
 import secrets
-import re
-
-
-import aiohttp
-from aiohttp import ClientSession
-import phonenumbers
 
 
 class AddToContactCenterEmptyParameters(BaseModel):
@@ -88,224 +82,84 @@ class AddToContactCenterVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = f"""Used in the following scenarios:
-1) Create or add a new caller's contact or personal information (i.e. name, address and email address)
-2) Update or edit an existing caller's personal information i.e. when a caller corrects their personal information for example, if email on file was abc@gmail.com but caller corrected it to jhn@gmail.com
-3) Used at any point in an ongoing call to create a new contact or edit/update an existing contact with new information.
-4) Create or updated information in system or contact center
-"""
-
+FUNCTION_DESCRIPTION = f" Create, add, edit, update, save a caller's information (i.e. name, phone number and email address)
+from an ongoing call
+use whenever you need to create a new contact, in the contact center"
 QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
-
-
-
-def normalize_phone_number(phone_number):
-    """
-    Normalize the phone number to ensure it is a 10-digit number by removing the country code.
-    
-    Parameters:
-        phone_number (str): The input phone number.
-    
-    Returns:
-        str: The normalized 10-digit phone number, or None if invalid.
-    """
-    logger.debug(f"normalize_phone_number received: {phone_number}")
-    if not phone_number:
-        logger.error("No phone number provided to normalize.")
-        return None
-    try:
-        # Parse the phone number
-        parsed_number = phonenumbers.parse(phone_number, None)
-        
-        # Check if the number is valid
-        if not phonenumbers.is_valid_number(parsed_number):
-            logger.error("Invalid phone number format.")
-            return None
-        
-        # Get the national number (without country code)
-        national_number = str(parsed_number.national_number)
-        logger.debug(f"Normalized Phone Number: {national_number}")
-        return national_number
-    except phonenumbers.phonenumberutil.NumberParseException:
-        # Return None if the number cannot be parsed
-        logger.error("NumberParseException: Unable to parse phone number.")
-        return None
-
 async def add_to_contact_center(
-    session: ClientSession,
-    server_url: str,
-    headers: dict,
-    phone: str,
-    caller_name: str = None,
-    email_address: str = None
-) -> (bool, dict or str): # type: ignore
-    """
-    Adds or updates a contact in the contact center.
-
-    Parameters:
-        session (ClientSession): The aiohttp client session.
-        server_url (str): The base URL of the contact center server.
-        headers (dict): HTTP headers for the requests.
-        phone (str): The phone number of the contact.
-        caller_name (str, optional): The name of the caller.
-        email_address (str, optional): The email address of the contact.
-
-    Returns:
-        tuple: (bool, dict or str) indicating success status and response or error message.
-    """
-    # Validate that session is a ClientSession instance
-    if not isinstance(session, ClientSession):
-        logger.error(f"Invalid session object: {session} (type: {type(session)})")
-        return False, "Invalid session object provided."
-
-    logger.debug(f"Starting add_to_contact_center with phone: {phone}")
-
-    # Step 1: Search for existing contact by phone number (original phone number)
-    params_search = {"phone": phone}
-    try:
-        async with session.get(
-            f"{server_url}/api/v1/omnichannel/contact.search",
-            headers=headers,
-            params=params_search,
-            timeout=aiohttp.ClientTimeout(total=10)  # Set a timeout for the request
-        ) as response_search:
-            logger.debug(f"Search Contact Response Status Code: {response_search.status} {response_search.reason}")
-            response_text = await response_search.text()
-            logger.debug(f"Search Contact Response Body: {response_text}")
-
-            if 200 <= response_search.status < 300:
-                try:
-                    search_json = await response_search.json()
-                    search_result = search_json.get("contact", {})
-                    if search_result:
-                        logger.debug(f"Contact found: {search_result}")
-                    else:
-                        logger.debug("No contact found with the given phone number.")
-                except json.JSONDecodeError:
-                    logger.error("Failed to decode JSON from search contact response.")
-                    search_result = {}
-            else:
-                logger.error(
-                    f"Failed to search contact: {response_search.status} {response_search.reason}"
-                )
-                search_result = {}
-    except aiohttp.ClientError as e:
-        logger.error(f"Exception during contact search: {e}")
-        search_result = {}
-
-    if search_result:
-        # Step 2: Update existing contact
-        logger.debug("Proceeding to update the existing contact.")
-
-        contact_id = search_result.get("_id")
-        token = search_result.get("token")
-
-        if not contact_id:
-            logger.error("Contact ID not found in search result.")
-            return False, "Contact ID not found in search result."
-
-        if not token:
-            logger.error("Token not found in search result.")
-            return False, "Token not found in search result."
-
-        # Normalize phone number for update
-        normalized_phone = normalize_phone_number(phone)
-        if not normalized_phone:
-            logger.error("Failed to normalize phone number for update.")
-            return False, "Failed to normalize phone number for update."
-
-        # Prepare the data payload for updating
-        data_update = {
-            "_id": contact_id,
-            "token": token,
-            "name": caller_name,
-            "phone": normalized_phone,  # Using normalized phone number
-            "email": email_address,
-        }
-
-        logger.debug(f"Data to send for updating contact: {data_update}")
-
-        try:
-            async with session.post(
-                f"{server_url}/api/v1/omnichannel/contact",
-                headers=headers,
-                data=json.dumps(data_update),
-                timeout=aiohttp.ClientTimeout(total=10)  # Set a timeout for the request
-            ) as response_update:
-                logger.debug(f"Update Contact Response Status Code: {response_update.status} {response_update.reason}")
-                response_update_text = await response_update.text()
-                logger.debug(f"Update Contact Response Body: {response_update_text}")
-
-                if 200 <= response_update.status < 300:
-                    try:
-                        response_json = await response_update.json()
-                        logger.debug("Contact updated successfully.")
-                        return True, response_json
-                    except json.JSONDecodeError:
-                        logger.error("Failed to decode JSON from update contact response.")
-                        return False, "Contact updated, but failed to parse response."
-                else:
-                    logger.error(
-                        f"Failed to update contact: {response_update.status} {response_update.reason}"
-                    )
-                    return False, "Unable to update contact"
-        except aiohttp.ClientError as e:
-            logger.error(f"Exception during contact update: {e}")
-            return False, f"Exception occurred: {e}"
+    server_url, headers, phone, caller_name, email_address
+):
+    # Normalize phone number
+    if not phone.startswith("+") and not phone.startswith("1"):
+        phone = "+1" + phone
+    elif phone.startswith("1"):
+        phone = "+" + phone
     else:
-        # Step 3: Create new contact
-        logger.debug("Proceeding to create a new contact.")
+        phone = phone
 
-        # Normalize phone number for creation
-        normalized_phone = normalize_phone_number(phone)
-        if not normalized_phone:
-            logger.error("Failed to normalize phone number for creation.")
-            return False, "Failed to normalize phone number for creation."
+    logger.debug(f"Normalized Phone Number: {phone}")
 
-        # Generate a random _id and token
-        _id = secrets.token_urlsafe(17)
+    params = {"phone": phone}
+
+    try:
+        async with AsyncRequestor().get_session() as session:
+            # Search for existing contact
+            async with session.get(
+                f"{server_url}/api/v1/omnichannel/contact.search",
+                headers=headers,
+                params=params,
+            ) as r_search:
+                if r_search.status != 200:
+                    logger.error(
+                        f"Failed to search contact: {r_search.status} {r_search.reason}"
+                    )
+                    cnt = []
+                else:
+                    r_search_json = await r_search.json()
+                    cnt = r_search_json.get("contact", [])
+    except Exception as e:
+        logger.error(f"Exception during contact search: {e}")
+        cnt = []
+
+    if not cnt:
+        # Create a random id and token
         token = secrets.token_urlsafe(22)
-        data_create = {
+        _id = secrets.token_urlsafe(17)
+        data = {
             "_id": _id,
             "token": token,
-            "phone": normalized_phone,
+            "phone": phone,
             "name": caller_name,
             "email": email_address,
         }
-
-        logger.debug(f"Data to send for creating contact: {data_create}")
+        logger.debug(f"Data to send: {data}")
 
         try:
-            async with session.post(
-                f"{server_url}/api/v1/omnichannel/contact",
-                headers=headers,
-                data=json.dumps(data_create),
-                timeout=aiohttp.ClientTimeout(total=10)  # Set a timeout for the request
-            ) as response_create:
-                logger.debug(f"Create Contact Response Status Code: {response_create.status} {response_create.reason}")
-                response_create_text = await response_create.text()
-                logger.debug(f"Create Contact Response Body: {response_create_text}")
-
-                if 200 <= response_create.status < 300:
-                    try:
-                        response_json = await response_create.json()
-                        logger.debug("Contact added successfully.")
-                        return True, response_json
-                    except json.JSONDecodeError:
-                        logger.error("Failed to decode JSON from create contact response.")
-                        return False, "Contact created, but failed to parse response."
-                else:
-                    logger.error(
-                        f"Failed to add contact: {response_create.status} {response_create.reason}"
-                    )
-                    return False, "Unable to add contact"
-        except aiohttp.ClientError as e:
+            async with AsyncRequestor().get_session() as session:
+                async with session.post(
+                    f"{server_url}/api/v1/omnichannel/contact",
+                    headers=headers,
+                    data=json.dumps(data),
+                ) as r_add:
+                    if r_add.status != 200:
+                        logger.error(
+                            f"Failed to add contact: {r_add.status} {r_add.reason}"
+                        )
+                        return False, "Unable to add contact"
+                    else:
+                        logger.debug("Contact added successfully")
+                        c_response = {"token": token, "_id": _id}
+                        return True, c_response
+        except Exception as e:
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
+    else:
+        logger.debug("Contact already exists")
+        return True, {"message": "Contact already exists"}
 
 
 class TwilioAddToContactCenter(
