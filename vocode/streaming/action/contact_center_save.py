@@ -133,13 +133,16 @@ def normalize_phone_number(phone):
         logger.error("Invalid phone number format.")
         raise ValueError("Invalid phone number format. Please provide a 10-digit number or 11-digit starting with '1'.")
 
+
+
 async def add_to_contact_center(
     session: ClientSession,
     server_url: str,
     headers: dict,
     phone: str,
     caller_name: str = None,
-    email_address: str = None) -> (bool, dict or str): # type: ignore
+    email_address: str = None
+) -> (bool, dict or str):
     """
     Adds or updates a contact in the contact center.
 
@@ -293,7 +296,8 @@ async def add_to_contact_center(
                     return False, "Unable to add contact"
         except aiohttp.ClientError as e:
             logger.error(f"Exception during contact addition: {e}")
-            return False, f"Exception occurred: {e}"        
+            return False, f"Exception occurred: {e}"
+
 
 class TwilioAddToContactCenter(
     TwilioPhoneConversationAction[
