@@ -19,6 +19,7 @@ from vocode.streaming.utils.state_manager import (
 import os
 import json
 import secrets
+import phonenumbers
 
 
 class AddToContactCenterEmptyParameters(BaseModel):
@@ -90,24 +91,61 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
+def normalize_phone_number(phone_number):
+    """
+    Normalize the phone number to ensure it is a 10-digit number by removing the country code.
+    
+    Parameters:
+        phone_number (str): The input phone number.
+    
+    Returns:
+        str: The normalized 10-digit phone number, or None if invalid.
+    """
+    logger.debug(f"normalize_phone_number received: {phone_number}")
+    if not phone_number:
+        logger.error("No phone number provided to normalize.")
+        return None
+    try:
+        # Parse the phone number
+        parsed_number = phonenumbers.parse(phone_number, None)
+        
+        # Check if the number is valid
+        if not phonenumbers.is_valid_number(parsed_number):
+            logger.error("Invalid phone number format.")
+            return None
+        
+        # Get the national number (without country code)
+        national_number = str(parsed_number.national_number)
+        logger.debug(f"Normalized Phone Number: {national_number}")
+        return national_number
+    except phonenumbers.phonenumberutil.NumberParseException:
+        # Return None if the number cannot be parsed
+        logger.error("NumberParseException: Unable to parse phone number.")
+        return None
+
+
+
 async def add_to_contact_center(
     server_url, headers, phone, caller_name, email_address
 ):
-    # Normalize phone number
-    if not phone.startswith("+") and not phone.startswith("1"):
-        phone = "+1" + phone
-    elif phone.startswith("1"):
-        phone = "+" + phone
-    else:
-        phone = phone
-
-    logger.debug(f"Normalized Phone Number: {phone}")
-
+    """
+    Adds a contact to the contact center. If the contact exists, it updates the contact.
+    
+    Args:
+        server_url (str): The base URL of the contact center API.
+        headers (dict): HTTP headers for the API requests.
+        phone (str): The phone number of the contact.
+        caller_name (str): The name of the caller.
+        email_address (str): The email address of the contact.
+    
+    Returns:
+        tuple: A tuple containing a boolean status and a response message or data.
+    """
     params = {"phone": phone}
 
     try:
         async with AsyncRequestor().get_session() as session:
-            # Search for existing contact
+            # Step 1: Search for existing contact
             async with session.get(
                 f"{server_url}/api/v1/omnichannel/contact.search",
                 headers=headers,
@@ -125,18 +163,20 @@ async def add_to_contact_center(
         logger.error(f"Exception during contact search: {e}")
         cnt = []
 
+    # Step 2: If contact doesn't exist, create it
     if not cnt:
-        # Create a random id and token
+        # Generate random _id and token
         token = secrets.token_urlsafe(22)
         _id = secrets.token_urlsafe(17)
+        normalized_phone = normalize_phone_number(phone)
         data = {
             "_id": _id,
             "token": token,
-            "phone": phone,
+            "phone": normalized_phone,
             "name": caller_name,
             "email": email_address,
         }
-        logger.debug(f"Data to send: {data}")
+        logger.debug(f"Data to create: {data}")
 
         try:
             async with AsyncRequestor().get_session() as session:
@@ -157,9 +197,48 @@ async def add_to_contact_center(
         except Exception as e:
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
+    
+    # Step 3: If contact exists, update it
     else:
-        logger.debug("Contact already exists")
-        return True, {"message": "Contact already exists"}
+        logger.debug("Contact already exists. Proceeding to update.")
+        try:
+            # Assuming 'cnt' is a list of contacts; take the first one
+            contact = cnt[0] if isinstance(cnt, list) else cnt
+            _id = contact.get("_id")
+            token = contact.get("token")
+            
+            if not _id or not token:
+                logger.error("Existing contact missing _id or token")
+                return False, "Existing contact missing _id or token"
+
+            # Normalize the phone number before updating
+            normalized_phone = normalize_phone_number(phone)
+            update_data = {
+                "_id": _id,
+                "token": token,
+                "phone": normalized_phone,
+                "name": caller_name,
+                "email": email_address,
+            }
+            logger.debug(f"Data to update: {update_data}")
+
+            async with AsyncRequestor().get_session() as session:
+                async with session.post(
+                    f"{server_url}/api/v1/omnichannel/contact",
+                    headers=headers,
+                    data=json.dumps(update_data),
+                ) as r_update:
+                    if r_update.status != 200:
+                        logger.error(
+                            f"Failed to update contact: {r_update.status} {r_update.reason}"
+                        )
+                        return False, "Unable to update contact"
+                    else:
+                        logger.debug("Contact updated successfully")
+                        return True, {"_id": _id, "token": token}
+        except Exception as e:
+            logger.error(f"Exception during contact update: {e}")
+            return False, f"Exception occurred: {e}"
 
 
 class TwilioAddToContactCenter(
