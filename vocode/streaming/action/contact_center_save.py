@@ -100,20 +100,34 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
+
 def normalize_phone_number(phone_number):
+    """
+    Normalize the phone number to ensure it is a 10-digit number by removing the country code.
+    
+    Parameters:
+        phone_number (str): The input phone number.
+    
+    Returns:
+        str: The normalized 10-digit phone number, or None if invalid.
+    """
     try:
         # Parse the phone number
         parsed_number = phonenumbers.parse(phone_number, None)
         
         # Check if the number is valid
         if not phonenumbers.is_valid_number(parsed_number):
+            logger.error("Invalid phone number format.")
             return None
+        
         # Get the national number (without country code)
         national_number = str(parsed_number.national_number)
+        logger.debug(f"Normalized Phone Number: {national_number}")
         return national_number
     except phonenumbers.phonenumberutil.NumberParseException:
         # Return None if the number cannot be parsed
-        return phone_number
+        logger.error("NumberParseException: Unable to parse phone number.")
+        return None
 
 async def add_to_contact_center(
     session: ClientSession,
@@ -137,7 +151,9 @@ async def add_to_contact_center(
     Returns:
         tuple: (bool, dict or str) indicating success status and response or error message.
     """
-    # Step 2: Search for existing contact by phone number
+    logger.debug(f"Extracted Phone Number: {phone}")
+
+    # Step 1: Search for existing contact by phone number (original phone number)
     params_search = {"phone": phone}
     try:
         async with session.get(
@@ -171,7 +187,7 @@ async def add_to_contact_center(
         search_result = {}
 
     if search_result:
-        # Step 3: Update existing contact
+        # Step 2: Update existing contact
         logger.debug("Proceeding to update the existing contact.")
 
         contact_id = search_result.get("_id")
@@ -184,14 +200,19 @@ async def add_to_contact_center(
         if not token:
             logger.error("Token not found in search result.")
             return False, "Token not found in search result."
-        ## normalize phone now!
+
+        # Normalize phone number for update
         normalized_phone = normalize_phone_number(phone)
+        if not normalized_phone:
+            logger.error("Failed to normalize phone number for update.")
+            return False, "Failed to normalize phone number for update."
+
         # Prepare the data payload for updating
         data_update = {
             "_id": contact_id,
             "token": token,
             "name": caller_name,
-            "phone": normalized_phone,  # Including 'phone' as per your example
+            "phone": normalized_phone,  # Using normalized phone number
             "email": email_address,
         }
 
@@ -225,13 +246,18 @@ async def add_to_contact_center(
             logger.error(f"Exception during contact update: {e}")
             return False, f"Exception occurred: {e}"
     else:
-        # Step 4: Create new contact
+        # Step 3: Create new contact
         logger.debug("Proceeding to create a new contact.")
+
+        # Normalize phone number for creation
+        normalized_phone = normalize_phone_number(phone)
+        if not normalized_phone:
+            logger.error("Failed to normalize phone number for creation.")
+            return False, "Failed to normalize phone number for creation."
 
         # Generate a random _id and token
         _id = secrets.token_urlsafe(17)
         token = secrets.token_urlsafe(22)
-        normalized_phone = normalize_phone_number(phone)
         data_create = {
             "_id": _id,
             "token": token,
@@ -269,6 +295,7 @@ async def add_to_contact_center(
         except aiohttp.ClientError as e:
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
+
 
 
 class TwilioAddToContactCenter(
