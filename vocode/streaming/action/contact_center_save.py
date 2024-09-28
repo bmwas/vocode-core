@@ -29,6 +29,9 @@ class AddToContactCenterEmptyParameters(BaseModel):
 class AddToContactCenterRequiredParameters(BaseModel):
     caller_name: str = Field(..., description="The name of the caller")
     email_address: str = Field(..., description="The email address of the caller")
+    direction: Literal["to", "from"] = Field(
+        ..., description="Direction of the call: 'to' or 'from'"
+    )
 
 
 AddToContactCenterParameters = Union[
@@ -66,6 +69,14 @@ class AddToContactCenterVocodeActionConfig(
         elif isinstance(input.params, AddToContactCenterEmptyParameters):
             assert self.email_address, "email address must be set"
             return self.email_address
+        else:
+            raise TypeError("Invalid input params type")
+
+    def get_direction(self, input: ActionInput) -> str:
+        if isinstance(input.params, AddToContactCenterRequiredParameters):
+            return input.params.direction
+        elif isinstance(input.params, AddToContactCenterEmptyParameters):
+            raise ValueError("Direction must be provided in parameters")
         else:
             raise TypeError("Invalid input params type")
 
@@ -280,6 +291,13 @@ class TwilioAddToContactCenter(
         caller_name = self.action_config.get_caller_name(action_input)
         email_address = self.action_config.get_email_address(action_input)
 
+        # Retrieve direction from parameters if provided
+        if isinstance(action_input.params, AddToContactCenterRequiredParameters):
+            direction = self.action_config.get_direction(action_input)
+        else:
+            # Handle cases where parameters are empty; you might want to set a default or raise an error
+            raise ValueError("Direction must be provided in parameters")
+
         # Extract phone number from Twilio using twilio_call_sid
         twilio_call_sid = self.get_twilio_sid(action_input)
         logger.debug(f"Twilio Call SID: {twilio_call_sid}")
@@ -306,7 +324,8 @@ class TwilioAddToContactCenter(
                     call_details = await response.json()
                     logger.debug(f"Call Details: {call_details}")
 
-        phone_number = call_details.get("from", "")
+        # Use the direction parameter to extract the correct phone number
+        phone_number = call_details.get(direction, "")
         logger.debug(f"Extracted Phone Number: {phone_number}")
 
         #sanitized_phone_number = sanitize_phone_number(phone_number)
