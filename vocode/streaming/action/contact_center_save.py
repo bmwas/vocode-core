@@ -137,18 +137,8 @@ async def add_to_contact_center(
     Returns:
         tuple: (bool, dict or str) indicating success status and response or error message.
     """
-    # Step 1: Normalize phone number
-    try:
-        phone = normalize_phone_number(phone)
-    except ValueError as ve:
-        logger.error(f"Phone normalization error: {ve}")
-        return False, str(ve)
-
-    logger.debug(f"Normalized Phone Number: {phone}")
-
     # Step 2: Search for existing contact by phone number
     params_search = {"phone": phone}
-
     try:
         async with session.get(
             f"{server_url}/api/v1/omnichannel/contact.search",
@@ -194,13 +184,14 @@ async def add_to_contact_center(
         if not token:
             logger.error("Token not found in search result.")
             return False, "Token not found in search result."
-
+        ## normalize phone now!
+        normalized_phone = normalize_phone_number(phone)
         # Prepare the data payload for updating
         data_update = {
             "_id": contact_id,
             "token": token,
             "name": caller_name,
-            "phone": phone,  # Including 'phone' as per your example
+            "phone": normalized_phone,  # Including 'phone' as per your example
             "email": email_address,
         }
 
@@ -240,10 +231,11 @@ async def add_to_contact_center(
         # Generate a random _id and token
         _id = secrets.token_urlsafe(17)
         token = secrets.token_urlsafe(22)
+        normalized_phone = normalize_phone_number(phone)
         data_create = {
             "_id": _id,
             "token": token,
-            "phone": phone,
+            "phone": normalized_phone,
             "name": caller_name,
             "email": email_address,
         }
