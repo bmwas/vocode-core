@@ -113,27 +113,33 @@ def normalize_phone_number(phone):
     Raises:
         ValueError: If the phone number format is invalid.
     """
+    logger.debug(f"normalize_phone_number called with phone: {phone}")
+    if phone is None:
+        logger.error("Phone number is None.")
+        raise ValueError("Phone number cannot be None.")
+    if not isinstance(phone, str):
+        logger.error(f"Phone number is not a string. Received type: {type(phone)}")
+        raise ValueError("Phone number must be a string.")
+
     # Remove any non-digit characters
-    phone = re.sub(r"[^\d]", "", phone)
-    logger.debug(f"Raw Phone Number after removing non-digit characters: {phone}")
+    phone_digits = re.sub(r"[^\d]", "", phone)
+    logger.debug(f"Raw Phone Number after removing non-digit characters: {phone_digits}")
 
     # Case 1: Phone number starts with '1' and is 11 digits
-    if re.fullmatch(r"1\d{10}", phone):
-        normalized_phone = phone[1:]
+    if re.fullmatch(r"1\d{10}", phone_digits):
+        normalized_phone = phone_digits[1:]
         logger.debug(f"Phone number starts with '1'. Normalized to: {normalized_phone}")
         return normalized_phone
 
     # Case 2: Phone number is exactly 10 digits
-    elif re.fullmatch(r"\d{10}", phone):
+    elif re.fullmatch(r"\d{10}", phone_digits):
         logger.debug("Phone number is already in the correct 10-digit format.")
-        return phone
+        return phone_digits
 
     else:
         # Handle invalid formats as needed
         logger.error("Invalid phone number format.")
         raise ValueError("Invalid phone number format. Please provide a 10-digit number or 11-digit starting with '1'.")
-
-
 
 
 async def add_to_contact_center(
