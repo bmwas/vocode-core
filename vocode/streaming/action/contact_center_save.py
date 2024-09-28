@@ -1,20 +1,17 @@
-from typing import Literal, Optional, Type, Union, get_args
+from typing import Literal, Optional, Type, Union
 
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
 
-from vocode.streaming.action.phone_call_action import (
-    TwilioPhoneConversationAction,
-    VonagePhoneConversationAction,
+from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
+from vocode.streaming.models.actions import (
+    ActionConfig as VocodeActionConfig,
+    ActionInput,
+    ActionOutput,
 )
-from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
-from vocode.streaming.models.actions import ActionInput, ActionOutput
+from vocode.streaming.models.actions import FunctionCallActionTrigger
 from vocode.streaming.utils.async_requester import AsyncRequestor
-from vocode.streaming.utils.phone_numbers import sanitize_phone_number
-from vocode.streaming.utils.state_manager import (
-    TwilioPhoneConversationStateManager,
-    VonagePhoneConversationStateManager,
-)
+from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 
 import os
 import json
@@ -22,16 +19,19 @@ import secrets
 import phonenumbers
 
 
+# ---------------------------
+# Pydantic Models
+# ---------------------------
+
 class AddToContactCenterEmptyParameters(BaseModel):
+    """Represents cases where no additional parameters are provided."""
     pass
 
 
 class AddToContactCenterRequiredParameters(BaseModel):
+    """Represents required parameters for adding to the contact center."""
     caller_name: str = Field(..., description="The name of the caller")
     email_address: str = Field(..., description="The email address of the caller")
-    direction: Literal["to", "from"] = Field(
-        ..., description="Direction of the call: 'to' or 'from'"
-    )
 
 
 AddToContactCenterParameters = Union[
@@ -40,13 +40,29 @@ AddToContactCenterParameters = Union[
 
 
 class AddToContactCenterResponse(BaseModel):
+    """Represents the response after attempting to add to the contact center."""
     success: bool
     message: Optional[str] = None
 
 
+# ---------------------------
+# Action Configuration
+# ---------------------------
+
 class AddToContactCenterVocodeActionConfig(
     VocodeActionConfig, type="action_add_to_contact_center"
-):  # type: ignore
+):
+    """
+    Configuration for the AddToContactCenterAction.
+
+    Attributes:
+        direction (Literal["to", "from"]): Direction of the call to extract the phone number.
+        caller_name (Optional[str]): The name of the caller (optional if provided in parameters).
+        email_address (Optional[str]): The email address of the caller (optional if provided in parameters).
+    """
+    direction: Literal["to", "from"] = Field(
+        ..., description="Direction of the call: 'to' or 'from'"
+    )
     caller_name: Optional[str] = Field(
         None, description="The name of the caller"
     )
@@ -55,6 +71,19 @@ class AddToContactCenterVocodeActionConfig(
     )
 
     def get_caller_name(self, input: ActionInput) -> str:
+        """
+        Retrieves the caller name from the action input parameters or configuration.
+
+        Args:
+            input (ActionInput): The input to the action.
+
+        Returns:
+            str: The caller's name.
+
+        Raises:
+            TypeError: If the input parameters are of an invalid type.
+            AssertionError: If the caller name is not set in the configuration when parameters are empty.
+        """
         if isinstance(input.params, AddToContactCenterRequiredParameters):
             return input.params.caller_name
         elif isinstance(input.params, AddToContactCenterEmptyParameters):
@@ -64,6 +93,19 @@ class AddToContactCenterVocodeActionConfig(
             raise TypeError("Invalid input params type")
 
     def get_email_address(self, input: ActionInput) -> str:
+        """
+        Retrieves the email address from the action input parameters or configuration.
+
+        Args:
+            input (ActionInput): The input to the action.
+
+        Returns:
+            str: The caller's email address.
+
+        Raises:
+            TypeError: If the input parameters are of an invalid type.
+            AssertionError: If the email address is not set in the configuration when parameters are empty.
+        """
         if isinstance(input.params, AddToContactCenterRequiredParameters):
             return input.params.email_address
         elif isinstance(input.params, AddToContactCenterEmptyParameters):
@@ -72,20 +114,31 @@ class AddToContactCenterVocodeActionConfig(
         else:
             raise TypeError("Invalid input params type")
 
-    def get_direction(self, input: ActionInput) -> str:
-        if isinstance(input.params, AddToContactCenterRequiredParameters):
-            return input.params.direction
-        elif isinstance(input.params, AddToContactCenterEmptyParameters):
-            raise ValueError("Direction must be provided in parameters")
-        else:
-            raise TypeError("Invalid input params type")
-
     def action_attempt_to_string(self, input: ActionInput) -> str:
-        return f"Attempting to add contact to contact center"
+        """
+        Returns a string representation of the action attempt.
+
+        Args:
+            input (ActionInput): The input to the action.
+
+        Returns:
+            str: Description of the action attempt.
+        """
+        return "Attempting to add contact to contact center"
 
     def action_result_to_string(
         self, input: ActionInput, output: ActionOutput
     ) -> str:
+        """
+        Returns a string representation of the action result.
+
+        Args:
+            input (ActionInput): The input to the action.
+            output (ActionOutput): The output from the action.
+
+        Returns:
+            str: Description of the action result.
+        """
         assert isinstance(output.response, AddToContactCenterResponse)
         if output.response.success:
             action_description = "Successfully added contact to contact center"
@@ -94,7 +147,7 @@ class AddToContactCenterVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = f"""Used in the following scenarios:
+FUNCTION_DESCRIPTION = """Used in the following scenarios:
 1) Create or add a new caller's contact or personal information (i.e. name, address and email address)
 2) Update or edit an existing caller's personal information i.e. when a caller corrects their personal information for example, if email on file was abc@gmail.com but caller corrected it to jhn@gmail.com
 3) Used at any point in an ongoing call to create a new contact or edit/update an existing contact with new information.
@@ -106,15 +159,19 @@ IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
-def normalize_phone_number(phone_number):
+# ---------------------------
+# Helper Functions
+# ---------------------------
+
+def normalize_phone_number(phone_number: str) -> Optional[str]:
     """
     Normalize the phone number to ensure it is a 10-digit number by removing the country code.
-    
+
     Parameters:
         phone_number (str): The input phone number.
-    
+
     Returns:
-        str: The normalized 10-digit phone number, or None if invalid.
+        Optional[str]: The normalized 10-digit phone number, or None if invalid.
     """
     logger.debug(f"normalize_phone_number received: {phone_number}")
     if not phone_number:
@@ -123,12 +180,12 @@ def normalize_phone_number(phone_number):
     try:
         # Parse the phone number
         parsed_number = phonenumbers.parse(phone_number, None)
-        
+
         # Check if the number is valid
         if not phonenumbers.is_valid_number(parsed_number):
             logger.error("Invalid phone number format.")
             return None
-        
+
         # Get the national number (without country code)
         national_number = str(parsed_number.national_number)
         logger.debug(f"Normalized Phone Number: {national_number}")
@@ -139,20 +196,23 @@ def normalize_phone_number(phone_number):
         return None
 
 
-
 async def add_to_contact_center(
-    server_url, headers, phone, caller_name, email_address
-):
+    server_url: str,
+    headers: dict,
+    phone: str,
+    caller_name: str,
+    email_address: str,
+) -> tuple:
     """
     Adds a contact to the contact center. If the contact exists, it updates the contact.
-    
+
     Args:
         server_url (str): The base URL of the contact center API.
         headers (dict): HTTP headers for the API requests.
         phone (str): The phone number of the contact.
         caller_name (str): The name of the caller.
         email_address (str): The email address of the contact.
-    
+
     Returns:
         tuple: A tuple containing a boolean status and a response message or data.
     """
@@ -184,6 +244,9 @@ async def add_to_contact_center(
         token = secrets.token_urlsafe(22)
         _id = secrets.token_urlsafe(17)
         normalized_phone = normalize_phone_number(phone)
+        if not normalized_phone:
+            return False, "Invalid phone number provided"
+
         data = {
             "_id": _id,
             "token": token,
@@ -212,7 +275,7 @@ async def add_to_contact_center(
         except Exception as e:
             logger.error(f"Exception during contact addition: {e}")
             return False, f"Exception occurred: {e}"
-    
+
     # Step 3: If contact exists, update it
     else:
         logger.debug("Contact already exists. Proceeding to update.")
@@ -221,13 +284,16 @@ async def add_to_contact_center(
             contact = cnt[0] if isinstance(cnt, list) else cnt
             _id = contact.get("_id")
             token = contact.get("token")
-            
+
             if not _id or not token:
                 logger.error("Existing contact missing _id or token")
                 return False, "Existing contact missing _id or token"
 
             # Normalize the phone number before updating
             normalized_phone = normalize_phone_number(phone)
+            if not normalized_phone:
+                return False, "Invalid phone number provided"
+
             update_data = {
                 "_id": _id,
                 "token": token,
@@ -256,19 +322,35 @@ async def add_to_contact_center(
             return False, f"Exception occurred: {e}"
 
 
-class TwilioAddToContactCenter(
+# ---------------------------
+# Action Implementation
+# ---------------------------
+
+class AddToContactCenter(
     TwilioPhoneConversationAction[
         AddToContactCenterVocodeActionConfig,
         AddToContactCenterParameters,
         AddToContactCenterResponse,
     ]
 ):
+    """
+    Action to add or update caller details in the contact center.
+
+    This action uses the Twilio call SID to retrieve call details, extract the phone number
+    based on the specified direction, and add or update the contact information in the contact center.
+    """
     description: str = FUNCTION_DESCRIPTION
     response_type: Type[AddToContactCenterResponse] = AddToContactCenterResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
     def parameters_type(self) -> Type[AddToContactCenterParameters]:
+        """
+        Determines the type of parameters the action expects.
+
+        Returns:
+            Type[AddToContactCenterParameters]: The parameter type.
+        """
         if self.action_config.caller_name and self.action_config.email_address:
             return AddToContactCenterEmptyParameters
         else:
@@ -278,6 +360,12 @@ class TwilioAddToContactCenter(
         self,
         action_config: AddToContactCenterVocodeActionConfig,
     ):
+        """
+        Initializes the action with the given configuration.
+
+        Args:
+            action_config (AddToContactCenterVocodeActionConfig): The configuration for the action.
+        """
         super().__init__(
             action_config,
             quiet=QUIET,
@@ -288,15 +376,21 @@ class TwilioAddToContactCenter(
     async def run(
         self, action_input: ActionInput[AddToContactCenterParameters]
     ) -> ActionOutput[AddToContactCenterResponse]:
+        """
+        Executes the action to add or update contact information in the contact center.
+
+        Args:
+            action_input (ActionInput[AddToContactCenterParameters]): The input for the action.
+
+        Returns:
+            ActionOutput[AddToContactCenterResponse]: The result of the action.
+        """
         caller_name = self.action_config.get_caller_name(action_input)
         email_address = self.action_config.get_email_address(action_input)
 
-        # Retrieve direction from parameters if provided
-        if isinstance(action_input.params, AddToContactCenterRequiredParameters):
-            direction = self.action_config.get_direction(action_input)
-        else:
-            # Handle cases where parameters are empty; you might want to set a default or raise an error
-            raise ValueError("Direction must be provided in parameters")
+        # Retrieve direction from the action configuration
+        direction = self.action_config.direction
+        logger.debug(f"Call direction from config: {direction}")
 
         # Extract phone number from Twilio using twilio_call_sid
         twilio_call_sid = self.get_twilio_sid(action_input)
@@ -304,6 +398,7 @@ class TwilioAddToContactCenter(
 
         twilio_client = self.conversation_state_manager.create_twilio_client()
 
+        # Construct the URL to fetch call details from Twilio
         url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_client.get_telephony_config().account_sid}/Calls/{twilio_call_sid}.json"
 
         async with AsyncRequestor().get_session() as session:
@@ -328,7 +423,16 @@ class TwilioAddToContactCenter(
         phone_number = call_details.get(direction, "")
         logger.debug(f"Extracted Phone Number: {phone_number}")
 
-        #sanitized_phone_number = sanitize_phone_number(phone_number)
+        if not phone_number:
+            logger.error("No phone number found in call details.")
+            success = False
+            message = "No phone number found in call details"
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=AddToContactCenterResponse(
+                    success=success, message=message
+                ),
+            )
 
         server_url = os.environ.get("PORTAL_URL")
         headers = {
@@ -336,6 +440,20 @@ class TwilioAddToContactCenter(
             "X-Auth-Token": os.environ.get("PORTAL_AUTH_TOKEN"),
             "X-User-Id": os.environ.get("PORTAL_USER_ID"),
         }
+
+        if not server_url or not headers["X-Auth-Token"] or not headers["X-User-Id"]:
+            logger.error(
+                "Missing environment variables for PORTAL_URL, PORTAL_AUTH_TOKEN, or PORTAL_USER_ID."
+            )
+            success = False
+            message = "Caller query was unsuccessful"
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=AddToContactCenterResponse(
+                    success=success, message=message
+                ),
+            )
+
         success, response_message = await add_to_contact_center(
             server_url,
             headers,
@@ -350,3 +468,91 @@ class TwilioAddToContactCenter(
                 success=success, message=str(response_message)
             ),
         )
+
+
+# ---------------------------
+# Helper Functions
+# ---------------------------
+
+async def query_contact_center(server_url: str, headers: dict, phone: str) -> dict:
+    """
+    Makes a GET request to the contact center API to retrieve contact information.
+
+    Args:
+        server_url (str): The base URL of the contact center API.
+        headers (dict): HTTP headers for the API request.
+        phone (str): The phone number to query.
+
+    Returns:
+        dict: Contact information retrieved from the contact center.
+    """
+    # Normalize the phone number
+    if phone.startswith("+"):
+        normalized_phone = phone
+    elif phone.startswith("1"):
+        normalized_phone = "+" + phone
+    else:
+        normalized_phone = "+1" + phone
+
+    logger.debug(f"Normalized Phone Number: {normalized_phone}")
+
+    params = {"phone": normalized_phone}
+
+    try:
+        async with AsyncRequestor().get_session() as session:
+            async with session.get(
+                f"{server_url}/api/v1/omnichannel/contact.search",
+                headers=headers,
+                params=params,
+            ) as r_search:
+                if r_search.status != 200:
+                    logger.error(
+                        f"Failed to search contact: {r_search.status} {r_search.reason}"
+                    )
+                    contact_info = {
+                        "name": "EMPTY",
+                        "phone_number": "EMPTY",
+                        "email_addresses": "EMPTY",
+                    }
+                else:
+                    r_search_json = await r_search.json()
+                    contact = r_search_json.get("contact", {})
+
+                    if not contact:
+                        logger.error("Contact not found")
+                        contact_info = {
+                            "name": "EMPTY",
+                            "phone_number": "EMPTY",
+                            "email_addresses": "EMPTY",
+                        }
+                    else:
+                        # Extract email addresses, using 'address' as the key
+                        visitor_emails = contact.get("visitorEmails", [])
+                        if isinstance(visitor_emails, list):
+                            # Extract 'address' field from each dict if exists
+                            email_addresses_list = [
+                                email.get("address")
+                                for email in visitor_emails
+                                if "address" in email
+                            ]
+                            # Convert the list to a comma-separated string
+                            email_addresses = ", ".join(email_addresses_list)
+                        else:
+                            email_addresses = ""
+
+                        contact_info = {
+                            "name": contact.get("name", "EMPTY") or "EMPTY",
+                            "phone_number": normalized_phone,
+                            "email_addresses": email_addresses
+                            if email_addresses
+                            else "EMPTY",
+                        }
+    except Exception as e:
+        logger.error(f"Exception during contact search: {e}")
+        contact_info = {
+            "name": "EMPTY",
+            "phone_number": "EMPTY",
+            "email_addresses": "EMPTY",
+        }
+    logger.debug(f"Final Contact Info: {contact_info}")
+    return contact_info
