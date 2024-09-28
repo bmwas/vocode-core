@@ -101,6 +101,8 @@ SHOULD_RESPOND: Literal["always"] = "always"
 
 
 
+
+
 def normalize_phone_number(phone_number):
     """
     Normalize the phone number to ensure it is a 10-digit number by removing the country code.
@@ -111,6 +113,10 @@ def normalize_phone_number(phone_number):
     Returns:
         str: The normalized 10-digit phone number, or None if invalid.
     """
+    logger.debug(f"normalize_phone_number received: {phone_number}")
+    if not phone_number:
+        logger.error("No phone number provided to normalize.")
+        return None
     try:
         # Parse the phone number
         parsed_number = phonenumbers.parse(phone_number, None)
@@ -151,7 +157,12 @@ async def add_to_contact_center(
     Returns:
         tuple: (bool, dict or str) indicating success status and response or error message.
     """
-    logger.debug(f"Extracted Phone Number: {phone}")
+    # Validate that session is a ClientSession instance
+    if not isinstance(session, ClientSession):
+        logger.error(f"Invalid session object: {session} (type: {type(session)})")
+        return False, "Invalid session object provided."
+
+    logger.debug(f"Starting add_to_contact_center with phone: {phone}")
 
     # Step 1: Search for existing contact by phone number (original phone number)
     params_search = {"phone": phone}
