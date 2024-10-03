@@ -58,6 +58,8 @@ class WaitTime(
         upper_limit = action_input.params.upper_limit
         # Enforce the upper limit on duration
         duration = min(duration_seconds, upper_limit)
+        print(">>>>>>>>> Upper Limit was >>>>>>>>>>>>>>>>>>>", upper_limit)
+        print(">>>>>>>>> Duration captured was >>>>>>>>>>>>>>>>>>>", duration_seconds)
         print(">>>>>>>>> Wait duration is >>>>>>>>>>>>>>>>>>>", duration)
         await asyncio.sleep(duration)
         return ActionOutput(
