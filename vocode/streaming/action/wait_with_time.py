@@ -20,7 +20,7 @@ class WaitTimeParameters(BaseModel):
         description="The duration in seconds to wait before the agent responds."
     )
     upper_limit: float = Field(
-        70.0,  # Default value for upper_limit
+        70.0,  # Default value for upper_limit (set at 70 seconds for now...i.e. BOT will wait for max of 70 seconds)
         description="The maximum duration in seconds the agent can wait."
     )
 
