@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Literal
 
 from pydantic.v1 import BaseModel, Field
 import asyncio
@@ -11,14 +11,16 @@ from vocode.streaming.models.actions import (
     FunctionCallActionTrigger,
 )
 
-class WaitTimeVocodeActionConfig(VocodeActionConfig, type="action_wait_time"):  # type: ignore
+class WaitTimeVocodeActionConfig(VocodeActionConfig):
+    # Define 'type' as a field with a default value
+    type: Literal["action_wait_time"] = "action_wait_time"
     duration_seconds: float = Field(
         ...,
-        description="The duration in seconds to wait before the agent responds."
+        description="The duration in seconds to wait before the agent responds.",
     )
     upper_limit: float = Field(
         ...,
-        description="The maximum duration in seconds the agent can wait."
+        description="The maximum duration in seconds the agent can wait.",
     )
 
 class WaitTimeResponse(BaseModel):
@@ -49,7 +51,9 @@ class WaitTime(
             should_respond="always",
         )
 
-    async def run(self, action_input: ActionInput[None]) -> ActionOutput[WaitTimeResponse]:
+    async def run(
+        self, action_input: ActionInput[None]
+    ) -> ActionOutput[WaitTimeResponse]:
         # Retrieve duration_seconds and upper_limit from action_config
         duration_seconds = self.action_config.duration_seconds
         upper_limit = self.action_config.upper_limit
