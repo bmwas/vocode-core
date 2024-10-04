@@ -65,6 +65,7 @@ class ActionType(str, Enum):
     DTMF = "action_dtmf"
     TIME_OF_DAY = "action_determine_time_of_day"
     WAIT_WITH_TIME = "action_wait_time"
+    TRANSFER_CALL_WARM = "action_warm_transfer_call"
 
 
 ParametersType = TypeVar("ParametersType", bound=BaseModel)
