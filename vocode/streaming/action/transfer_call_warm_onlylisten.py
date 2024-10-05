@@ -15,7 +15,6 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-import json
 import aiohttp
 
 
@@ -217,9 +216,9 @@ class TwilioListenOnlyWarmTransferCall(
         participants_list_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json'
 
         supervisor_participant_sid = None
-        max_attempts = 10
-        attempt = 0
-        while attempt < max_attempts and not supervisor_participant_sid:
+        max_participant_attempts = 10
+        participant_attempt = 0
+        while participant_attempt < max_participant_attempts and not supervisor_participant_sid:
             async with session.get(participants_list_url, auth=auth) as response:
                 if response.status != 200:
                     response_text = await response.text()
@@ -238,13 +237,14 @@ class TwilioListenOnlyWarmTransferCall(
                         break
             if supervisor_participant_sid:
                 break
-            attempt += 1
-            logger.info(f"Supervisor not found in participants yet. Attempt {attempt}/{max_attempts}. Retrying in 1 second...")
+            participant_attempt += 1
+            logger.info(f"Supervisor not found in participants yet. Attempt {participant_attempt}/{max_participant_attempts}. Retrying in 1 second...")
             await asyncio.sleep(1)
 
         if not supervisor_participant_sid:
-            logger.error("Supervisor's participant SID not found")
-            raise Exception("Supervisor's participant SID not found")
+            logger.warning("Supervisor's participant SID not found after maximum attempts")
+            # Optionally, decide whether to continue without muting or handle differently
+            return  # Exit the function without raising an exception
 
         # Mute the supervisor
         mute_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants/{supervisor_participant_sid}.json'
@@ -270,16 +270,16 @@ class TwilioListenOnlyWarmTransferCall(
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
-        logger.info(
-            "Finished waiting for user message tracker, now attempting to perform listen-only warm transfer call"
-        )
-
-        if self.conversation_state_manager.transcript.was_last_message_interrupted():
-            logger.info("Last bot message was interrupted, not transferring call")
-            return ActionOutput(
-                action_type=action_input.action_config.type,
-                response=ListenOnlyWarmTransferCallResponse(success=False),
+            logger.info(
+                "Finished waiting for user message tracker, now attempting to perform listen-only warm transfer call"
             )
+
+            if self.conversation_state_manager.transcript.was_last_message_interrupted():
+                logger.info("Last bot message was interrupted, not transferring call")
+                return ActionOutput(
+                    action_type=action_input.action_config.type,
+                    response=ListenOnlyWarmTransferCallResponse(success=False),
+                )
 
         await self.transfer_call(twilio_call_sid, sanitized_phone_number)
 
