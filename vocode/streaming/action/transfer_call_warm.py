@@ -16,18 +16,23 @@ from vocode.streaming.utils.state_manager import (
     VonagePhoneConversationStateManager,
 )
 
+
 class WarmTransferCallEmptyParameters(BaseModel):
     pass
 
+
 class WarmTransferCallRequiredParameters(BaseModel):
     phone_number: str = Field(..., description="The phone number to transfer the call to")
+
 
 WarmTransferCallParameters = Union[
     WarmTransferCallEmptyParameters, WarmTransferCallRequiredParameters
 ]
 
+
 class WarmTransferCallResponse(BaseModel):
     success: bool
+
 
 class WarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_warm_transfer_call"
@@ -57,10 +62,12 @@ class WarmTransferCallVocodeActionConfig(
             action_description = "Did not transfer call because user interrupted"
         return action_description
 
-FUNCTION_DESCRIPTION = f"""Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
+
+FUNCTION_DESCRIPTION = """Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
+
 
 class TwilioWarmTransferCall(
     TwilioPhoneConversationAction[
@@ -129,12 +136,17 @@ class TwilioWarmTransferCall(
                 else:
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
-        # Add the third party to the conference
-        from_phone_number = twilio_client.get_telephony_config().from_phone_number
+        # Determine the 'From' phone number
+        if self.conversation_state_manager.get_direction() == "outbound":
+            from_phone_number = self.conversation_state_manager.get_from_phone()
+        else:
+            from_phone_number = self.conversation_state_manager.get_to_phone()
+
         if not from_phone_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
+        # Add the third party to the conference
         participant_payload = {
             'From': from_phone_number,
             'To': to_phone,
