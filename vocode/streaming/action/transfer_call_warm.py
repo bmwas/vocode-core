@@ -7,6 +7,7 @@ from pydantic.v1 import BaseModel, Field
 
 from vocode.streaming.action.phone_call_action import (
     TwilioPhoneConversationAction,
+    VonagePhoneConversationAction,
 )
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
@@ -14,6 +15,7 @@ from vocode.streaming.utils.async_requester import AsyncRequestor
 from vocode.streaming.utils.phone_numbers import sanitize_phone_number
 from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
+    VonagePhoneConversationStateManager,
 )
 
 
@@ -63,8 +65,7 @@ class WarmTransferCallVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = """Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
-
+FUNCTION_DESCRIPTION = f"""Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
@@ -102,64 +103,62 @@ class TwilioWarmTransferCall(
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
         async_requestor = AsyncRequestor()
+        session = async_requestor.get_session()
 
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
-        # Use the session as a context manager
-        async with async_requestor.get_session() as session:
-            # Step 1: Update the existing call (customer and agent) to join the conference
-            update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{twilio_call_sid}.json'
-            update_payload = {
-                'Twiml': f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
-            }
-            async with session.post(update_call_url, data=update_payload, auth=auth) as response:
-                update_response_text = await response.text()
-                if response.status not in [200, 201]:
-                    logger.error(f"Failed to update call: {response.status} {response.reason} {update_response_text}")
-                    raise Exception("Failed to update call")
-                else:
-                    logger.info(f"Call {twilio_call_sid} updated to join conference {conference_name}")
-
-            # Step 2: Wait for the conference to be created
-            await asyncio.sleep(1)  # Adjust delay as necessary
-
-            # Step 3: Fetch the conference SID using the conference name
-            fetch_conference_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences.json?FriendlyName={conference_name}'
-            async with session.get(fetch_conference_url, auth=auth) as response:
-                fetch_response_text = await response.text()
-                if response.status != 200:
-                    logger.error(f"Failed to fetch conference: {response.status} {response.reason} {fetch_response_text}")
-                    raise Exception("Failed to fetch conference")
-                data = await response.json()
-                conferences = data.get('conferences', [])
-                if not conferences:
-                    logger.error("No conference found with the specified name")
-                    raise Exception("Conference not found")
-                conference_sid = conferences[0]['sid']
-
-            # Step 4: Get the agent's phone number
-            if self.conversation_state_manager.get_direction() == "outbound":
-                agent_phone_number = self.conversation_state_manager.get_from_phone()
+        # Step 1: Update the existing call (customer and agent) to join the conference
+        update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{twilio_call_sid}.json'
+        update_payload = {
+            'Twiml': f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
+        }
+        async with session.post(update_call_url, data=update_payload, auth=auth) as response:
+            if response.status not in [200, 201]:
+                logger.error(f"Failed to update call: {response.status} {response.reason}")
+                raise Exception("Failed to update call")
             else:
-                agent_phone_number = self.conversation_state_manager.get_to_phone()
+                logger.info(f"Call {twilio_call_sid} updated to join conference {conference_name}")
 
-            # Step 5: Add the manager to the conference by making a call to them
-            add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
-            participant_payload = {
-                'From': agent_phone_number,
-                'To': to_phone,
-                'Url': f'https://handler.twilio.com/twiml/EHXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX?ConferenceName={conference_name}'
-            }
-            async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
-                participant_response_text = await response.text()
-                if response.status not in [200, 201]:
-                    logger.error(f"Failed to call participant: {response.status} {response.reason} {participant_response_text}")
-                    raise Exception("Failed to call participant")
-                else:
-                    logger.info(f"Called participant {to_phone} to join conference {conference_name}")
-                    participant_data = await response.json()
-                    participant_call_sid = participant_data.get('sid')
+        # Step 2: Wait for the conference to be created
+        await asyncio.sleep(1)  # Adjust delay as necessary
+
+        # Step 3: Fetch the conference SID using the conference name
+        fetch_conference_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences.json?FriendlyName={conference_name}'
+        async with session.get(fetch_conference_url, auth=auth) as response:
+            if response.status != 200:
+                logger.error(f"Failed to fetch conference: {response.status} {response.reason}")
+                raise Exception("Failed to fetch conference")
+            data = await response.json()
+            conferences = data.get('conferences', [])
+            if not conferences:
+                logger.error("No conference found with the specified name")
+                raise Exception("Conference not found")
+            conference_sid = conferences[0]['sid']
+
+        # Step 4: Get the agent's phone number
+        if self.conversation_state_manager.get_direction() == "outbound":
+            agent_phone_number = self.conversation_state_manager.get_from_phone()
+        else:
+            agent_phone_number = self.conversation_state_manager.get_to_phone()
+
+        # Step 5: Add the manager to the conference by making a call to them
+        add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
+        participant_payload = {
+            'From': agent_phone_number,
+            'To': to_phone,
+            'Twiml': f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
+        }
+        async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
+            if response.status not in [200, 201]:
+                logger.error(f"Failed to call participant: {response.status} {response.reason}")
+                raise Exception("Failed to call participant")
+            else:
+                logger.info(f"Called participant {to_phone} to join conference {conference_name}")
+
+        # Optionally return participant SID
+        participant_data = await response.json()
+        participant_call_sid = participant_data.get('sid')
 
         return participant_call_sid
 
