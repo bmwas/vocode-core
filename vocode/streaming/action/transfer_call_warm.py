@@ -144,6 +144,9 @@ class TwilioWarmTransferCall(
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
         # Determine the 'From' phone number
+        direction = self.conversation_state_manager.get_direction()
+        print(">>>>>>>>>>>>>>>>>>>Conference Call Direction >>>>>>>>>>>>>>>>>>>>>>>", direction)
+        
         if self.conversation_state_manager.get_direction() == "outbound":
             from_phone_number = self.conversation_state_manager.get_from_phone()
         else:
