@@ -1,10 +1,8 @@
 from typing import Literal, Optional, Type, Union, get_args
 import time
 import asyncio
-
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
-
 from vocode.streaming.action.phone_call_action import (
     TwilioPhoneConversationAction,
     VonagePhoneConversationAction,
@@ -18,23 +16,18 @@ from vocode.streaming.utils.state_manager import (
     VonagePhoneConversationStateManager,
 )
 
-
 class WarmTransferCallEmptyParameters(BaseModel):
     pass
 
-
 class WarmTransferCallRequiredParameters(BaseModel):
     phone_number: str = Field(..., description="The phone number to transfer the call to")
-
 
 WarmTransferCallParameters = Union[
     WarmTransferCallEmptyParameters, WarmTransferCallRequiredParameters
 ]
 
-
 class WarmTransferCallResponse(BaseModel):
     success: bool
-
 
 class WarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_warm_transfer_call"
@@ -64,12 +57,10 @@ class WarmTransferCallVocodeActionConfig(
             action_description = "Did not transfer call because user interrupted"
         return action_description
 
-
 FUNCTION_DESCRIPTION = f"""Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
 QUIET = False
 IS_INTERRUPTIBLE = True
 SHOULD_RESPOND: Literal["always"] = "always"
-
 
 class TwilioWarmTransferCall(
     TwilioPhoneConversationAction[
@@ -87,10 +78,7 @@ class TwilioWarmTransferCall(
         else:
             return WarmTransferCallRequiredParameters
 
-    def __init__(
-        self,
-        action_config: WarmTransferCallVocodeActionConfig,
-    ):
+    def __init__(self, action_config: WarmTransferCallVocodeActionConfig):
         super().__init__(
             action_config,
             quiet=QUIET,
@@ -111,8 +99,9 @@ class TwilioWarmTransferCall(
         # Step 1: Update the existing call (customer and agent) to join the conference
         update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{twilio_call_sid}.json'
         update_payload = {
-            'Twiml': f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
+            'Twiml': f'{conference_name}'
         }
+
         async with session.post(update_call_url, data=update_payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(f"Failed to update call: {response.status} {response.reason}")
@@ -125,15 +114,19 @@ class TwilioWarmTransferCall(
 
         # Step 3: Fetch the conference SID using the conference name
         fetch_conference_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences.json?FriendlyName={conference_name}'
+        
         async with session.get(fetch_conference_url, auth=auth) as response:
             if response.status != 200:
                 logger.error(f"Failed to fetch conference: {response.status} {response.reason}")
                 raise Exception("Failed to fetch conference")
+                
             data = await response.json()
             conferences = data.get('conferences', [])
+            
             if not conferences:
                 logger.error("No conference found with the specified name")
                 raise Exception("Conference not found")
+                
             conference_sid = conferences[0]['sid']
 
         # Step 4: Get the agent's phone number
@@ -144,11 +137,13 @@ class TwilioWarmTransferCall(
 
         # Step 5: Add the manager to the conference by making a call to them
         add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
+        
         participant_payload = {
             'From': agent_phone_number,
             'To': to_phone,
-            'Twiml': f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
+            'Twiml': f'{conference_name}'
         }
+
         async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(f"Failed to call participant: {response.status} {response.reason}")
@@ -156,34 +151,31 @@ class TwilioWarmTransferCall(
             else:
                 logger.info(f"Called participant {to_phone} to join conference {conference_name}")
 
-        # Optionally return participant SID
-        participant_data = await response.json()
-        participant_call_sid = participant_data.get('sid')
+                # Optionally return participant SID
+                participant_data = await response.json()
+                participant_call_sid = participant_data.get('sid')
 
-        return participant_call_sid
+                return participant_call_sid
 
-    async def run(
-        self, action_input: ActionInput[WarmTransferCallParameters]
-    ) -> ActionOutput[WarmTransferCallResponse]:
+    async def run(self, action_input: ActionInput[WarmTransferCallParameters]) -> ActionOutput[WarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
-
         phone_number = self.action_config.get_phone_number(action_input)
         sanitized_phone_number = sanitize_phone_number(phone_number)
 
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
-        logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
+            logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
 
-        if self.conversation_state_manager.transcript.was_last_message_interrupted():
-            logger.info("Last bot message was interrupted, not transferring call")
-            return ActionOutput(
-                action_type=action_input.action_config.type,
-                response=WarmTransferCallResponse(success=False),
-            )
+            if self.conversation_state_manager.transcript.was_last_message_interrupted():
+                logger.info("Last bot message was interrupted, not transferring call")
+                return ActionOutput(
+                    action_type=action_input.action_config.type,
+                    response=WarmTransferCallResponse(success=False),
+                )
 
         await self.transfer_call(twilio_call_sid, sanitized_phone_number)
-
+        
         return ActionOutput(
             action_type=action_input.action_config.type,
             response=WarmTransferCallResponse(success=True),
