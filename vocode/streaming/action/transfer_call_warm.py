@@ -104,7 +104,13 @@ class TwilioWarmTransferCall(
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
         # TwiML to join the conference
-        twiml_conference = f'<Response><Dial><Conference>{conference_name}</Conference></Dial></Response>'
+        twiml_conference = f'''
+        <Response>
+            <Dial>
+                <Conference startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
+            </Dial>
+        </Response>
+        '''
 
         # Collect the call SIDs to update
         call_sids_to_update = [twilio_call_sid]
