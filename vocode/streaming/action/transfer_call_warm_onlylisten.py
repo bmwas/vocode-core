@@ -186,7 +186,9 @@ class TwilioListenOnlyWarmTransferCall(
                 supervisor_call_sid = participant_data.get('sid')
                 if not supervisor_call_sid:
                     logger.error("Supervisor's call SID not found in the response")
-                    raise Exception("Supervisor's call SID not found in the response")
+                    # Instead of raising an exception, log a warning and proceed
+                    logger.warning("Proceeding without muting the supervisor due to missing call SID")
+                    return  # Exit the function without raising an exception
 
         # Wait until the conference is active
         conference_sid = None
@@ -243,7 +245,7 @@ class TwilioListenOnlyWarmTransferCall(
 
         if not supervisor_participant_sid:
             logger.warning("Supervisor's participant SID not found after maximum attempts")
-            # Optionally, decide whether to continue without muting or handle differently
+            # Proceed without muting the supervisor
             return  # Exit the function without raising an exception
 
         # Mute the supervisor
@@ -256,7 +258,8 @@ class TwilioListenOnlyWarmTransferCall(
             if response.status not in [200, 201, 204]:
                 response_text = await response.text()
                 logger.error(f"Failed to mute supervisor: {response.status} {response.reason} - {response_text}")
-                raise Exception("Failed to mute supervisor")
+                # Optionally, log a warning and proceed
+                logger.warning("Proceeding without muting the supervisor due to API failure")
             else:
                 logger.info(f"Muted supervisor {to_phone} in conference {conference_name}")
 
@@ -270,20 +273,26 @@ class TwilioListenOnlyWarmTransferCall(
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
-            logger.info(
-                "Finished waiting for user message tracker, now attempting to perform listen-only warm transfer call"
+        logger.info(
+            "Finished waiting for user message tracker, now attempting to perform listen-only warm transfer call"
+        )
+
+        if self.conversation_state_manager.transcript.was_last_message_interrupted():
+            logger.info("Last bot message was interrupted, not transferring call")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=False),
             )
 
-            if self.conversation_state_manager.transcript.was_last_message_interrupted():
-                logger.info("Last bot message was interrupted, not transferring call")
-                return ActionOutput(
-                    action_type=action_input.action_config.type,
-                    response=ListenOnlyWarmTransferCallResponse(success=False),
-                )
-
-        await self.transfer_call(twilio_call_sid, sanitized_phone_number)
-
-        return ActionOutput(
-            action_type=action_input.action_config.type,
-            response=ListenOnlyWarmTransferCallResponse(success=True),
-        )
+        try:
+            await self.transfer_call(twilio_call_sid, sanitized_phone_number)
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=True),
+            )
+        except Exception as e:
+            logger.error(f"Error during transfer_call: {e}")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=False),
+            )
