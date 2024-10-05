@@ -148,19 +148,19 @@ class TwilioWarmTransferCall(
         print(">>>>>>>>>>>>>>>>>>>Conference Call Direction >>>>>>>>>>>>>>>>>>>>>>>", direction)
         
         if self.conversation_state_manager.get_direction() == "outbound":
-            #from_phone_number = self.conversation_state_manager.get_from_phone()
-            from_phone_number = self.conversation_state_manager.get_to_phone()
+            #conf_add_phone_number = self.conversation_state_manager.get_from_phone()
+            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
         else:
-            #from_phone_number = self.conversation_state_manager.get_to_phone()
-            from_phone_number = self.conversation_state_manager.get_from_phone()
+            #conf_add_phone_number = self.conversation_state_manager.get_to_phone()
+            conf_add_phone_number = self.conversation_state_manager.get_from_phone()
 
-        if not from_phone_number:
+        if not conf_add_phone_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
         # Add the third party to the conference
         participant_payload = {
-            'From': "+17139292951",
+            'From': conf_add_phone_number,
             'To': to_phone,
             'Twiml': twiml_conference
         }
