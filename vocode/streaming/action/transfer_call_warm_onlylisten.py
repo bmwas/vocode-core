@@ -184,11 +184,14 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.info(f"Called supervisor {to_phone} to join conference {conference_name}")
                 # Retrieve the supervisor's call SID
                 participant_data = await response.json()
-                participant_call_sid = participant_data.get('sid')
+                supervisor_call_sid = participant_data.get('sid')
+                if not supervisor_call_sid:
+                    logger.error("Supervisor's call SID not found in the response")
+                    raise Exception("Supervisor's call SID not found in the response")
 
         # Wait until the conference is active
         conference_sid = None
-        max_attempts = 10
+        max_attempts = 15
         attempt = 0
         while attempt < max_attempts:
             conference_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences.json?FriendlyName={conference_name}'
@@ -201,6 +204,7 @@ class TwilioListenOnlyWarmTransferCall(
                 conferences = conferences_data.get('conferences', [])
                 if conferences:
                     conference_sid = conferences[0].get('sid')
+                    logger.info(f"Conference SID found: {conference_sid}")
                     break
             attempt += 1
             logger.info(f"Conference not found yet. Attempt {attempt}/{max_attempts}. Retrying in 1 second...")
@@ -212,18 +216,31 @@ class TwilioListenOnlyWarmTransferCall(
         # Retrieve the supervisor's Participant SID
         participants_list_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Conferences/{conference_sid}/Participants.json'
 
-        async with session.get(participants_list_url, auth=auth) as response:
-            if response.status != 200:
-                response_text = await response.text()
-                logger.error(f"Failed to retrieve participants: {response.status} {response.reason} - {response_text}")
-                raise Exception("Failed to retrieve participants")
-            participants_data = await response.json()
-            participants = participants_data.get('participants', [])
-            supervisor_participant_sid = None
-            for participant in participants:
-                if participant.get('call_sid') == participant_call_sid:
-                    supervisor_participant_sid = participant.get('sid')
-                    break
+        supervisor_participant_sid = None
+        max_attempts = 10
+        attempt = 0
+        while attempt < max_attempts and not supervisor_participant_sid:
+            async with session.get(participants_list_url, auth=auth) as response:
+                if response.status != 200:
+                    response_text = await response.text()
+                    logger.error(f"Failed to retrieve participants: {response.status} {response.reason} - {response_text}")
+                    raise Exception("Failed to retrieve participants")
+                participants_data = await response.json()
+                participants = participants_data.get('participants', [])
+                for participant in participants:
+                    participant_call_sid = participant.get('call_sid')
+                    participant_sid = participant.get('sid')
+                    participant_status = participant.get('status')
+                    logger.debug(f"Participant: SID={participant_sid}, Call SID={participant_call_sid}, Status={participant_status}")
+                    if participant_call_sid == supervisor_call_sid:
+                        supervisor_participant_sid = participant_sid
+                        logger.info(f"Supervisor's participant SID found: {supervisor_participant_sid}")
+                        break
+            if supervisor_participant_sid:
+                break
+            attempt += 1
+            logger.info(f"Supervisor not found in participants yet. Attempt {attempt}/{max_attempts}. Retrying in 1 second...")
+            await asyncio.sleep(1)
 
         if not supervisor_participant_sid:
             logger.error("Supervisor's participant SID not found")
