@@ -66,6 +66,7 @@ class ActionType(str, Enum):
     TIME_OF_DAY = "action_determine_time_of_day"
     WAIT_WITH_TIME = "action_wait_time"
     TRANSFER_CALL_WARM = "action_warm_transfer_call"
+    TRANSFER_CALL_WARM_ONLYLISTEN = "action_listen_only_warm_transfer_call"
 
 
 ParametersType = TypeVar("ParametersType", bound=BaseModel)

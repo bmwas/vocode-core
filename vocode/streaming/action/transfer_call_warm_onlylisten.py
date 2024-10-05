@@ -17,34 +17,34 @@ from vocode.streaming.utils.state_manager import (
 )
 
 
-class WarmTransferCallEmptyParameters(BaseModel):
+class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
 
 
-class WarmTransferCallRequiredParameters(BaseModel):
+class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
     phone_number: str = Field(..., description="The phone number to transfer the call to")
 
 
-WarmTransferCallParameters = Union[
-    WarmTransferCallEmptyParameters, WarmTransferCallRequiredParameters
+ListenOnlyWarmTransferCallParameters = Union[
+    ListenOnlyWarmTransferCallEmptyParameters, ListenOnlyWarmTransferCallRequiredParameters
 ]
 
 
-class WarmTransferCallResponse(BaseModel):
+class ListenOnlyWarmTransferCallResponse(BaseModel):
     success: bool
 
 
-class WarmTransferCallVocodeActionConfig(
-    VocodeActionConfig, type="action_warm_transfer_call"
+class ListenOnlyWarmTransferCallVocodeActionConfig(
+    VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  # type: ignore
     phone_number: Optional[str] = Field(
         None, description="The phone number to transfer the call to"
     )
 
     def get_phone_number(self, input: ActionInput) -> str:
-        if isinstance(input.params, WarmTransferCallRequiredParameters):
+        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
             return input.params.phone_number
-        elif isinstance(input.params, WarmTransferCallEmptyParameters):
+        elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
             assert self.phone_number, "phone number must be set"
             return self.phone_number
         else:
@@ -52,41 +52,43 @@ class WarmTransferCallVocodeActionConfig(
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         phone_number = self.get_phone_number(input)
-        return f"Attempting to warm transfer call to {phone_number}"
+        return f"Attempting to perform a listen-only warm transfer call to {phone_number}"
 
     def action_result_to_string(self, input: ActionInput, output: ActionOutput) -> str:
-        assert isinstance(output.response, WarmTransferCallResponse)
+        assert isinstance(output.response, ListenOnlyWarmTransferCallResponse)
         if output.response.success:
-            action_description = "Successfully performed warm transfer of call"
+            action_description = "Successfully performed listen-only warm transfer of call"
         else:
             action_description = "Did not transfer call because user interrupted"
         return action_description
 
 
-FUNCTION_DESCRIPTION = """Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call.
+FUNCTION_DESCRIPTION = """Performs a listen-only warm transfer of the call to a manager or supervisor by adding all parties to a conference call where the supervisor can only listen.
 MUST keep talking as you await other participants to join the conference call"""
 QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
-class TwilioWarmTransferCall(
+class TwilioListenOnlyWarmTransferCall(
     TwilioPhoneConversationAction[
-        WarmTransferCallVocodeActionConfig, WarmTransferCallParameters, WarmTransferCallResponse
+        ListenOnlyWarmTransferCallVocodeActionConfig,
+        ListenOnlyWarmTransferCallParameters,
+        ListenOnlyWarmTransferCallResponse,
     ]
 ):
     description: str = FUNCTION_DESCRIPTION
-    response_type: Type[WarmTransferCallResponse] = WarmTransferCallResponse
+    response_type: Type[ListenOnlyWarmTransferCallResponse] = ListenOnlyWarmTransferCallResponse
     conversation_state_manager: TwilioPhoneConversationStateManager
 
     @property
-    def parameters_type(self) -> Type[WarmTransferCallParameters]:
+    def parameters_type(self) -> Type[ListenOnlyWarmTransferCallParameters]:
         if self.action_config.phone_number:
-            return WarmTransferCallEmptyParameters
+            return ListenOnlyWarmTransferCallEmptyParameters
         else:
-            return WarmTransferCallRequiredParameters
+            return ListenOnlyWarmTransferCallRequiredParameters
 
-    def __init__(self, action_config: WarmTransferCallVocodeActionConfig):
+    def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
             action_config,
             quiet=QUIET,
@@ -145,7 +147,9 @@ class TwilioWarmTransferCall(
 
             async with session.post(update_call_url, data=update_payload, auth=auth) as response:
                 if response.status not in [200, 201, 204]:
-                    logger.error(f"Failed to update call {call_sid}: {response.status} {response.reason}")
+                    logger.error(
+                        f"Failed to update call {call_sid}: {response.status} {response.reason}"
+                    )
                     raise Exception(f"Failed to update call {call_sid}")
                 else:
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
@@ -171,10 +175,14 @@ class TwilioWarmTransferCall(
 
         async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
             if response.status not in [200, 201]:
-                logger.error(f"Failed to call supervisor: {response.status} {response.reason}")
+                logger.error(
+                    f"Failed to call supervisor: {response.status} {response.reason}"
+                )
                 raise Exception("Failed to call supervisor")
             else:
-                logger.info(f"Called supervisor {to_phone} to join conference {conference_name}")
+                logger.info(
+                    f"Called supervisor {to_phone} to join conference {conference_name}"
+                )
 
                 # Optionally return participant SID
                 participant_data = await response.json()
@@ -182,7 +190,9 @@ class TwilioWarmTransferCall(
 
                 return participant_call_sid
 
-    async def run(self, action_input: ActionInput[WarmTransferCallParameters]) -> ActionOutput[WarmTransferCallResponse]:
+    async def run(
+        self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
+    ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         phone_number = self.action_config.get_phone_number(action_input)
         sanitized_phone_number = sanitize_phone_number(phone_number)
@@ -190,18 +200,20 @@ class TwilioWarmTransferCall(
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
-        logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
+        logger.info(
+            "Finished waiting for user message tracker, now attempting to perform listen-only warm transfer call"
+        )
 
         if self.conversation_state_manager.transcript.was_last_message_interrupted():
             logger.info("Last bot message was interrupted, not transferring call")
             return ActionOutput(
                 action_type=action_input.action_config.type,
-                response=WarmTransferCallResponse(success=False),
+                response=ListenOnlyWarmTransferCallResponse(success=False),
             )
 
         await self.transfer_call(twilio_call_sid, sanitized_phone_number)
-        
+
         return ActionOutput(
             action_type=action_input.action_config.type,
-            response=WarmTransferCallResponse(success=True),
+            response=ListenOnlyWarmTransferCallResponse(success=True),
         )
