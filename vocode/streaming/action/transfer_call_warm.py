@@ -130,7 +130,7 @@ class TwilioWarmTransferCall(
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
         # Add the third party to the conference
-        from_phone_number = self.conversation_state_manager.get_twilio_number()
+        from_phone_number = twilio_client.get_telephony_config().from_phone_number
         if not from_phone_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
