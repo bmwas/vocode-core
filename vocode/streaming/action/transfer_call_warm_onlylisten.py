@@ -104,14 +104,23 @@ class TwilioWarmTransferCall(
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
-        # TwiML to join the conference
-        twiml_conference = f'''
-        <Response>
-            <Dial>
-                <Conference startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
-            </Dial>
-        </Response>
-        '''
+        # TwiML for caller and callee (endConferenceOnExit="false")
+        participant_twiml = f'''
+<Response>
+    <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="false" waitUrl="" >{conference_name}</Conference>
+    </Dial>
+</Response>
+'''
+
+        # TwiML for supervisor (muted)
+        supervisor_twiml = f'''
+<Response>
+    <Dial>
+        <Conference startConferenceOnEnter="true" endConferenceOnExit="false" muted="true" waitUrl="" >{conference_name}</Conference>
+    </Dial>
+</Response>
+'''
 
         # Collect the call SIDs to update
         call_sids_to_update = [twilio_call_sid]
@@ -129,12 +138,10 @@ class TwilioWarmTransferCall(
                 child_call_sid = call.get('sid')
                 call_sids_to_update.append(child_call_sid)
 
-        # Update all calls to join the conference
+        # Update caller and callee to join the conference
         for call_sid in call_sids_to_update:
             update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}.json'
-            update_payload = {
-                'Twiml': twiml_conference
-            }
+            update_payload = {'Twiml': participant_twiml}
 
             async with session.post(update_call_url, data=update_payload, auth=auth) as response:
                 if response.status not in [200, 201, 204]:
@@ -143,33 +150,31 @@ class TwilioWarmTransferCall(
                 else:
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
-        
+        # Determine the 'From' phone number for adding the supervisor
         if self.conversation_state_manager.get_direction() == "outbound":
-            #conf_add_phone_number = self.conversation_state_manager.get_from_phone()
             conf_add_phone_number = self.conversation_state_manager.get_to_phone()
         else:
-            #conf_add_phone_number = self.conversation_state_manager.get_to_phone()
             conf_add_phone_number = self.conversation_state_manager.get_from_phone()
 
         if not conf_add_phone_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
-        # Add the third party to the conference
+        # Add the supervisor to the conference (muted)
         participant_payload = {
             'From': conf_add_phone_number,
             'To': to_phone,
-            'Twiml': twiml_conference
+            'Twiml': supervisor_twiml
         }
 
         add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
 
         async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
             if response.status not in [200, 201]:
-                logger.error(f"Failed to call participant: {response.status} {response.reason}")
-                raise Exception("Failed to call participant")
+                logger.error(f"Failed to call supervisor: {response.status} {response.reason}")
+                raise Exception("Failed to call supervisor")
             else:
-                logger.info(f"Called participant {to_phone} to join conference {conference_name}")
+                logger.info(f"Called supervisor {to_phone} to join conference {conference_name}")
 
                 # Optionally return participant SID
                 participant_data = await response.json()
@@ -185,14 +190,14 @@ class TwilioWarmTransferCall(
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
-            logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
+        logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
 
-            if self.conversation_state_manager.transcript.was_last_message_interrupted():
-                logger.info("Last bot message was interrupted, not transferring call")
-                return ActionOutput(
-                    action_type=action_input.action_config.type,
-                    response=WarmTransferCallResponse(success=False),
-                )
+        if self.conversation_state_manager.transcript.was_last_message_interrupted():
+            logger.info("Last bot message was interrupted, not transferring call")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=WarmTransferCallResponse(success=False),
+            )
 
         await self.transfer_call(twilio_call_sid, sanitized_phone_number)
         
