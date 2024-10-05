@@ -63,9 +63,10 @@ class WarmTransferCallVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = """Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call."""
+FUNCTION_DESCRIPTION = """Performs a warm transfer of the call to a manager or supervisor by adding all parties to a conference call.
+MUST keep talking as you await other participants to join the conference call"""
 QUIET = False
-IS_INTERRUPTIBLE = True
+IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
 
