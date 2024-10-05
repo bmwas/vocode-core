@@ -9,7 +9,6 @@ from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.phone_numbers import sanitize_phone_number
 
-
 # Define Parameters and Response Models
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -192,7 +191,6 @@ class TwilioListenOnlyWarmTransferCall(
             raise Exception(f"Conference {conference_name} not found after {max_attempts} attempts")
 
         # Since the supervisor is already muted via TwiML, no need to mute via API
-
         logger.info(f"Listen-only warm transfer to supervisor {supervisor_number} completed successfully")
 
     async def run(
