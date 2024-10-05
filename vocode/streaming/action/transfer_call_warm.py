@@ -148,9 +148,11 @@ class TwilioWarmTransferCall(
         print(">>>>>>>>>>>>>>>>>>>Conference Call Direction >>>>>>>>>>>>>>>>>>>>>>>", direction)
         
         if self.conversation_state_manager.get_direction() == "outbound":
-            from_phone_number = self.conversation_state_manager.get_from_phone()
-        else:
+            #from_phone_number = self.conversation_state_manager.get_from_phone()
             from_phone_number = self.conversation_state_manager.get_to_phone()
+        else:
+            #from_phone_number = self.conversation_state_manager.get_to_phone()
+            from_phone_number = self.conversation_state_manager.get_from_phone()
 
         if not from_phone_number:
             logger.error("Twilio 'From' phone number is not set")
