@@ -15,7 +15,6 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-from twilio.rest import Client
 
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
@@ -111,7 +110,7 @@ class TwilioListenOnlyWarmTransferCall(
         twiml_conference = f'''
         <Response>
             <Dial>
-                <Conference startConferenceOnEnter="true" endConferenceOnExit="false" waitUrl="">{conference_name}</Conference>
+                <Conference startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
             </Dial>
         </Response>
         '''
@@ -146,31 +145,46 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Determine the phone number to use for adding supervisor
         if self.conversation_state_manager.get_direction() == "outbound":
-            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
+            conf_add_phone_number = self.conversation_state_manager.get_from_phone() 
         else:
-            conf_add_phone_number = self.conversation_state_manager.get_from_phone()
+            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
 
         if not conf_add_phone_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
-        # Initialize Twilio REST API client
-        twilio_rest_client = Client(auth[0], auth[1], account_sid)
+        # **New TwiML to add the supervisor as a coach**
+        # Here, we set the coach parameter to the agent's Call SID (twilio_call_sid)
+        # This allows the supervisor to monitor and whisper to the agent
+        twiml_conference_coach = f'''
+        <Response>
+            <Dial>
+                <Conference coach="{twilio_call_sid}" startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
+            </Dial>
+        </Response>
+        '''
 
-        # Add the supervisor to the conference as a coach using Twilio REST API
-        try:
-            participant = twilio_rest_client.conferences(conference_name).participants.create(
-                from_=conf_add_phone_number,
-                to=to_phone,
-                early_media=True,  # Optional: allows the supervisor to hear early media
-                coach=True,
-                # Specify the Call SID of the agent to coach
-                call_sid_to_coach=twilio_call_sid
-            )
-            logger.info(f"Supervisor {to_phone} added as coach to conference {conference_name} with Call SID {participant.call_sid}")
-        except Exception as e:
-            logger.error(f"Failed to add supervisor as coach: {str(e)}")
-            raise Exception("Failed to add supervisor as coach")
+        # Add the supervisor to the conference as a coach
+        participant_payload = {
+            'From': conf_add_phone_number,
+            'To': to_phone,
+            'Twiml': twiml_conference_coach
+        }
+
+        add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
+
+        async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
+            if response.status not in [200, 201]:
+                logger.error(f"Failed to call participant: {response.status} {response.reason}")
+                raise Exception("Failed to call participant")
+            else:
+                logger.info(f"Called participant {to_phone} to join conference {conference_name} as coach")
+
+                # Optionally return participant SID
+                participant_data = await response.json()
+                participant_call_sid = participant_data.get('sid')
+
+                return participant_call_sid
 
     async def run(self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
