@@ -95,7 +95,7 @@ class TwilioListenOnlyWarmTransferCall(
         conference_name = f'Conference_{twilio_call_sid}'
 
         # Step 1: Move Agent's Call to Conference
-        logger.info(f"Moving agent's call {twilio_call_sid} to conference {conference_name}")
+        
         try:
             twiml_agent = VoiceResponse()
             dial_agent = Dial()
@@ -106,9 +106,12 @@ class TwilioListenOnlyWarmTransferCall(
                 beep=False
             )
             twiml_agent.append(dial_agent)
+            logger.info(f"Moving agent's call {twilio_call_sid} to conference >>> {conference_name}")
             client.calls(twilio_call_sid).update(twiml=str(twiml_agent))
-            await asyncio.sleep(2)  # Wait for 2 seconds
-            logger.info(f"Agent's call updated to join conference {conference_name}")
+            logger.info(f"Moved agent's call to conference >>> {conference_name}")
+            conference = client.conferences(conference_name).fetch()
+            participants = conference.participants.list()
+            logger.info(f"Conference Participants as of now >>> : {participants}")
         except Exception as e:
             logger.error(f"Error moving agent's call to conference: {e}")
             raise
