@@ -15,8 +15,8 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-import time
-from twilio.base.exceptions import TwilioRestException
+from twilio.rest import Client
+
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -97,85 +97,98 @@ class TwilioListenOnlyWarmTransferCall(
             should_respond=SHOULD_RESPOND,
         )
 
-
     async def transfer_call(self, twilio_call_sid: str, to_phone: str):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
+        auth = twilio_client.auth  # Should be a tuple (username, auth_token)
+        async_requestor = AsyncRequestor()
+        session = async_requestor.get_session()
+
+        # **Retrieve the Twilio Number**
+        twilio_number = self.conversation_state_manager.get_twilio_number()
+        if not twilio_number:
+            logger.error("Twilio number is not set in the conversation state manager")
+            raise Exception("Twilio number is not set")
+
+        logger.info(f"Twilio Number for outgoing calls: {twilio_number}")
 
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
+        # TwiML to join the conference (for agent and provider)
+        twiml_conference = f'''
+        <Response>
+            <Dial>
+                <Conference startConferenceOnEnter="true" endConferenceOnExit="false" waitUrl="">{conference_name}</Conference>
+            </Dial>
+        </Response>
+        '''
+
+        # Fetch child calls and update to join conference
+        call_sids_to_update = [twilio_call_sid]
+        calls_list_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json?ParentCallSid={twilio_call_sid}'
+
+        async with session.get(calls_list_url, auth=auth) as response:
+            if response.status != 200:
+                logger.error(f"Failed to fetch child calls: {response.status} {response.reason}")
+                raise Exception("Failed to fetch child calls")
+            calls_data = await response.json()
+            child_calls = calls_data.get('calls', [])
+            for call in child_calls:
+                child_call_sid = call.get('sid')
+                call_sids_to_update.append(child_call_sid)
+
+        logger.info(f"Call SIDs to update and join conference: {call_sids_to_update}")
+
+        # Update all calls to join the conference
+        for call_sid in call_sids_to_update:
+            update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}.json'
+            update_payload = {
+                'Twiml': twiml_conference
+            }
+
+            async with session.post(update_call_url, data=update_payload, auth=auth) as response:
+                if response.status not in [200, 201, 204]:
+                    logger.error(f"Failed to update call {call_sid}: {response.status} {response.reason}")
+                    raise Exception(f"Failed to update call {call_sid}")
+                else:
+                    logger.info(f"Call {call_sid} updated to join conference {conference_name}")
+
+        # **Add Supervisor as Coach**
+
+        # Ensure that 'twilio_call_sid' is the agent's Call SID
+        agent_call_sid = twilio_call_sid  # Verify this is indeed the agent's Call SID
+        logger.info(f"Agent Call SID: {agent_call_sid}")
+
+        # Initialize Twilio REST API client using the correct credentials
+        twilio_rest_client = Client(auth[0], auth[1], account_sid)
+
+        # Add the supervisor to the conference as a coach using Twilio REST API
         try:
-            # Step 1: Create the conference
-            conference = twilio_client.conferences.create(
-                friendly_name=conference_name,
-                status_callback=f'https://your-callback-url.com/conference-events',
-                status_callback_event=['start', 'end', 'join', 'leave', 'mute', 'hold'],
-                record=True
+            participant = twilio_rest_client.conferences(conference_name).participants.create(
+                from_=twilio_number,          # Ensure this is your Twilio number
+                to=to_phone,                  # Supervisor's phone number
+                early_media=True,             # Optional: allows the supervisor to hear early media
+                coach=True,                   # Designate as a coach
+                call_sid_to_coach=agent_call_sid,  # Coach the agent
+                end_conference_on_exit=False  # Ensure conference doesn't end if supervisor leaves
             )
-            logger.info(f"Created conference: {conference.sid}")
-
-            # Step 2: Add the agent to the conference
-            agent_call = twilio_client.calls(twilio_call_sid).fetch()
-            twilio_client.calls(twilio_call_sid).update(
-                status="in-progress",
-                url=f"https://handler.twilio.com/twiml/EH123456789abcdef?conference={conference_name}"
-            )
-            logger.info(f"Updated agent call: {agent_call.sid}")
-
-            # Step 3: Add the customer to the conference
-            if agent_call.parent_call_sid:
-                customer_call = twilio_client.calls(agent_call.parent_call_sid).update(
-                    status="in-progress",
-                    url=f"https://handler.twilio.com/twiml/EH123456789abcdef?conference={conference_name}"
-                )
-                logger.info(f"Updated customer call: {customer_call.sid}")
-            else:
-                logger.warning("Could not find customer call to add to conference")
-
-            # Step 4: Add the supervisor to the conference as a coach
-            supervisor_call = twilio_client.calls.create(
-                to=to_phone,
-                from_=self.conversation_state_manager.get_from_phone(),
-                twiml=f'<Response><Dial><Conference startConferenceOnEnter="false" endConferenceOnExit="false" coach="{twilio_call_sid}">{conference_name}</Conference></Dial></Response>'
-            )
-            logger.info(f"Added supervisor to conference as coach: {supervisor_call.sid}")
-
-            # Step 5: Wait for a short period to ensure all participants are connected
-            await asyncio.sleep(10)
-
-            # Step 6: Verify conference participants
-            participants = twilio_client.conferences(conference.sid).participants.list()
-            logger.info(f"Conference participants: {[p.call_sid for p in participants]}")
-
-            return supervisor_call.sid
-
-        except TwilioRestException as e:
-            logger.error(f"Twilio REST API error in transfer_call: {str(e)}")
-            raise
+            logger.info(f"Supervisor {to_phone} added as coach to conference {conference_name} with Call SID {participant.call_sid}")
         except Exception as e:
-            logger.error(f"Unexpected error in transfer_call: {str(e)}")
-            raise
-        finally:
-            # Regardless of success or failure, log the final state of the calls
-            try:
-                agent_call = twilio_client.calls(twilio_call_sid).fetch()
-                logger.info(f"Final agent call status: {agent_call.status}")
-                if agent_call.parent_call_sid:
-                    customer_call = twilio_client.calls(agent_call.parent_call_sid).fetch()
-                    logger.info(f"Final customer call status: {customer_call.status}")
-            except Exception as e:
-                logger.error(f"Error fetching final call statuses: {str(e)}")
+            logger.error(f"Failed to add supervisor as coach: {str(e)}")
+            raise Exception("Failed to add supervisor as coach")
 
     async def run(self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         phone_number = self.action_config.get_phone_number(action_input)
         sanitized_phone_number = sanitize_phone_number(phone_number)
 
-        logger.info(f"Starting warm transfer for call {twilio_call_sid} to {sanitized_phone_number}")
+        logger.info(f"Twilio Call SID: {twilio_call_sid}")
+        logger.info(f"Supervisor Phone Number: {sanitized_phone_number}")
 
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
+
             logger.info("Finished waiting for user message tracker, now attempting to warm transfer call")
 
             if self.conversation_state_manager.transcript.was_last_message_interrupted():
@@ -185,20 +198,10 @@ class TwilioListenOnlyWarmTransferCall(
                     response=ListenOnlyWarmTransferCallResponse(success=False),
                 )
 
-        try:
-            supervisor_call_sid = await self.transfer_call(twilio_call_sid, sanitized_phone_number)
-            logger.info(f"Successfully transferred call. Supervisor call SID: {supervisor_call_sid}")
-            
-            # Add a longer delay here to keep the connection open
-            await asyncio.sleep(20)
-            
-            return ActionOutput(
-                action_type=action_input.action_config.type,
-                response=ListenOnlyWarmTransferCallResponse(success=True, supervisor_call_sid=supervisor_call_sid),
-            )
-        except Exception as e:
-            logger.error(f"Failed to transfer call: {str(e)}")
-            return ActionOutput(
-                action_type=action_input.action_config.type,
-                response=ListenOnlyWarmTransferCallResponse(success=False, error_message=str(e)),
-            )
+        # Call the modified transfer_call method
+        await self.transfer_call(twilio_call_sid, sanitized_phone_number)
+        
+        return ActionOutput(
+            action_type=action_input.action_config.type,
+            response=ListenOnlyWarmTransferCallResponse(success=True),
+        )
