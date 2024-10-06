@@ -99,7 +99,6 @@ class TwilioListenOnlyWarmTransferCall(
     async def transfer_call(self, twilio_call_sid: str, to_phone: str):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
-        auth = twilio_client.auth
 
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
@@ -108,55 +107,47 @@ class TwilioListenOnlyWarmTransferCall(
         try:
             conference = twilio_client.conferences.create(
                 friendly_name=conference_name,
-                record=False
+                record=True
             )
             logger.info(f"Created conference: {conference.sid}")
         except Exception as e:
             logger.error(f"Failed to create conference: {str(e)}")
             raise
 
-        # Step 2: Add the agent to the conference
+        # Step 2: Move the agent to the conference
         try:
-            agent_participant = twilio_client.conferences(conference.sid).participants.create(
-                from_=self.conversation_state_manager.get_from_phone(),
-                to=twilio_call_sid,
-                start_conference_on_enter=True,
-                end_conference_on_exit=False
+            agent_participant = twilio_client.calls(twilio_call_sid).update(
+                twiml=f'<Response><Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="false">{conference_name}</Conference></Dial></Response>'
             )
-            logger.info(f"Added agent to conference: {agent_participant.call_sid}")
+            logger.info(f"Moved agent to conference: {agent_participant.sid}")
         except Exception as e:
-            logger.error(f"Failed to add agent to conference: {str(e)}")
+            logger.error(f"Failed to move agent to conference: {str(e)}")
             raise
 
-        # Step 3: Add the customer to the conference
+        # Step 3: Move the customer to the conference
         try:
             customer_call = twilio_client.calls(twilio_call_sid).fetch()
-            customer_participant = twilio_client.conferences(conference.sid).participants.create(
-                from_=self.conversation_state_manager.get_from_phone(),
-                to=customer_call.to,
-                start_conference_on_enter=True,
-                end_conference_on_exit=False
+            customer_participant = twilio_client.calls(customer_call.parent_call_sid).update(
+                twiml=f'<Response><Dial><Conference startConferenceOnEnter="true" endConferenceOnExit="false">{conference_name}</Conference></Dial></Response>'
             )
-            logger.info(f"Added customer to conference: {customer_participant.call_sid}")
+            logger.info(f"Moved customer to conference: {customer_participant.sid}")
         except Exception as e:
-            logger.error(f"Failed to add customer to conference: {str(e)}")
+            logger.error(f"Failed to move customer to conference: {str(e)}")
             raise
 
         # Step 4: Add the supervisor to the conference as a coach
         try:
-            supervisor_participant = twilio_client.conferences(conference.sid).participants.create(
-                from_=self.conversation_state_manager.get_from_phone(),
+            supervisor_call = twilio_client.calls.create(
                 to=to_phone,
-                coaching=agent_participant.call_sid,
-                start_conference_on_enter=False,
-                end_conference_on_exit=False
+                from_=self.conversation_state_manager.get_from_phone(),
+                twiml=f'<Response><Dial><Conference startConferenceOnEnter="false" endConferenceOnExit="false" coach="{twilio_call_sid}">{conference_name}</Conference></Dial></Response>'
             )
-            logger.info(f"Added supervisor to conference as coach: {supervisor_participant.call_sid}")
+            logger.info(f"Added supervisor to conference as coach: {supervisor_call.sid}")
         except Exception as e:
             logger.error(f"Failed to add supervisor to conference: {str(e)}")
             raise
 
-        return supervisor_participant.call_sid
+        return supervisor_call.sid
 
     async def run(self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
