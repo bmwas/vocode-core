@@ -151,7 +151,7 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Step 3: Add Supervisor to Conference via New Call
         supervisor_number = sanitize_phone_number(supervisor_phone)
-        logger.info(f"Adding supervisor {supervisor_number} to conference {conference_name} as muted")
+        logger.info(f"Adding supervisor {supervisor_number} to conference {conference_name} as listener")
         try:
             twiml_supervisor = VoiceResponse()
             dial_supervisor = Dial()
