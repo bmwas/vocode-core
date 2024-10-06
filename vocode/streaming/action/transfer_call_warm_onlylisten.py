@@ -95,25 +95,58 @@ class TwilioListenOnlyWarmTransferCall(
         # Define Conference Name
         conference_name = f'Conference_{twilio_call_sid}'
 
-        # Step 1: Update Existing Call to Join Conference
-        logger.info(f"Moving existing call {twilio_call_sid} to conference {conference_name}")
+        # Step 1: Move Agent's Call to Conference
+        logger.info(f"Moving agent's call {twilio_call_sid} to conference {conference_name}")
         try:
-            twiml = VoiceResponse()
-            dial = Dial()
-            dial.conference(
+            twiml_agent = VoiceResponse()
+            dial_agent = Dial()
+            dial_agent.conference(
                 conference_name,
                 start_conference_on_enter=True,
                 end_conference_on_exit=False,
                 beep=False
             )
-            twiml.append(dial)
-            client.calls(twilio_call_sid).update(twiml=str(twiml))
-            logger.info(f"Call {twilio_call_sid} updated to join conference {conference_name}")
+            twiml_agent.append(dial_agent)
+            client.calls(twilio_call_sid).update(twiml=str(twiml_agent))
+            logger.info(f"Agent's call updated to join conference {conference_name}")
         except Exception as e:
-            logger.error(f"Error moving call to conference: {e}")
+            logger.error(f"Error moving agent's call to conference: {e}")
             raise
 
-        # Step 2: Add Supervisor to Conference (Muted)
+        # Step 2: Add Provider to Conference
+        direction = self.conversation_state_manager.get_direction()
+        if direction == "outbound":
+            provider_phone = self.conversation_state_manager.get_to_phone()
+        else:
+            provider_phone = self.conversation_state_manager.get_from_phone()
+
+        if not provider_phone:
+            logger.error("Provider phone number is not set")
+            raise Exception("Provider phone number is not set")
+
+        sanitized_provider_number = sanitize_phone_number(provider_phone)
+        logger.info(f"Adding provider {sanitized_provider_number} to conference {conference_name}")
+        try:
+            twiml_provider = VoiceResponse()
+            dial_provider = Dial()
+            dial_provider.conference(
+                conference_name,
+                start_conference_on_enter=True,
+                end_conference_on_exit=False,
+                beep=False
+            )
+            twiml_provider.append(dial_provider)
+            provider_call = client.calls.create(
+                to=sanitized_provider_number,
+                from_=self.conversation_state_manager.get_from_phone(),  # Twilio number
+                twiml=str(twiml_provider)
+            )
+            logger.info(f"Provider call initiated with SID {provider_call.sid}")
+        except Exception as e:
+            logger.error(f"Error adding provider to conference: {e}")
+            raise
+
+        # Step 3: Add Supervisor to Conference (Muted)
         supervisor_number = sanitize_phone_number(supervisor_phone)
         logger.info(f"Adding supervisor {supervisor_number} to conference {conference_name} as muted")
         try:
@@ -137,7 +170,7 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Error adding supervisor to conference: {e}")
             raise
 
-        # Step 3: Wait for Conference to be Active
+        # Step 4: Wait for Conference to be Active
         conference_sid = None
         max_attempts = 15
         attempt = 0
@@ -165,7 +198,6 @@ class TwilioListenOnlyWarmTransferCall(
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
-        logger.info("Custom TwilioListenOnlyWarmTransferCall run method invoked.")
         try:
             twilio_call_sid = self.get_twilio_sid(action_input)
             supervisor_phone = self.action_config.get_phone_number(action_input)
