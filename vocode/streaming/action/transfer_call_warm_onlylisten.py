@@ -204,4 +204,8 @@ class TwilioListenOnlyWarmTransferCall(
                 response=ListenOnlyWarmTransferCallResponse(success=True),
             )
         except Exception as e:
-            logger.error
+            logger.error(f"Error during listen-only warm transfer: {e}")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=False),
+            )
