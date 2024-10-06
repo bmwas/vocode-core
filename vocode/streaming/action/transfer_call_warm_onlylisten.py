@@ -110,7 +110,7 @@ class TwilioListenOnlyWarmTransferCall(
         twiml_conference = f'''
         <Response>
             <Dial>
-                <Conference startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
+                <Conference startConferenceOnEnter="true" endConferenceOnExit="false" waitUrl="">{conference_name}</Conference>
             </Dial>
         </Response>
         '''
@@ -143,6 +143,17 @@ class TwilioListenOnlyWarmTransferCall(
                 else:
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
+        # Wait for a short time to ensure the conference is created
+        await asyncio.sleep(2)
+
+        # Verify the conference exists
+        try:
+            conference = twilio_client.conferences(conference_name).fetch()
+            logger.info(f"Conference {conference_name} exists with status: {conference.status}")
+        except Exception as e:
+            logger.error(f"Failed to fetch conference {conference_name}: {str(e)}")
+            raise
+
         # Determine the phone number to use for adding supervisor
         if self.conversation_state_manager.get_direction() == "outbound":
             conf_add_phone_number = self.conversation_state_manager.get_from_phone() 
@@ -153,38 +164,19 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
-        # **New TwiML to add the supervisor as a coach**
-        # Here, we set the coach parameter to the agent's Call SID (twilio_call_sid)
-        # This allows the supervisor to monitor and whisper to the agent
-        twiml_conference_coach = f'''
-        <Response>
-            <Dial>
-                <Conference coach="{twilio_call_sid}" startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
-            </Dial>
-        </Response>
-        '''
-
-        # Add the supervisor to the conference as a coach
-        participant_payload = {
-            'From': conf_add_phone_number,
-            'To': to_phone,
-            'Twiml': twiml_conference_coach
-        }
-
-        add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
-
-        async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
-            if response.status not in [200, 201]:
-                logger.error(f"Failed to call participant: {response.status} {response.reason}")
-                raise Exception("Failed to call participant")
-            else:
-                logger.info(f"Called participant {to_phone} to join conference {conference_name} as coach")
-
-                # Optionally return participant SID
-                participant_data = await response.json()
-                participant_call_sid = participant_data.get('sid')
-
-                return participant_call_sid
+        # Add the supervisor to the conference as a coach using REST API
+        try:
+            supervisor_call = twilio_client.conferences(conference_name).participants.create(
+                from_=conf_add_phone_number,
+                to=to_phone,
+                coaching=True,
+                call_sid_to_coach=twilio_call_sid
+            )
+            logger.info(f"Added supervisor {to_phone} to conference {conference_name} as coach")
+            return supervisor_call.call_sid
+        except Exception as e:
+            logger.error(f"Failed to add supervisor to conference: {str(e)}")
+            raise
 
     async def run(self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
@@ -203,10 +195,17 @@ class TwilioListenOnlyWarmTransferCall(
                     response=ListenOnlyWarmTransferCallResponse(success=False),
                 )
 
-        # Call the modified transfer_call method
-        await self.transfer_call(twilio_call_sid, sanitized_phone_number)
-        
-        return ActionOutput(
-            action_type=action_input.action_config.type,
-            response=ListenOnlyWarmTransferCallResponse(success=True),
-        )
+        try:
+            # Call the modified transfer_call method
+            supervisor_call_sid = await self.transfer_call(twilio_call_sid, sanitized_phone_number)
+            
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=True, supervisor_call_sid=supervisor_call_sid),
+            )
+        except Exception as e:
+            logger.error(f"Failed to transfer call: {str(e)}")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=False, error_message=str(e)),
+            )
