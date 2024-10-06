@@ -109,9 +109,6 @@ class TwilioListenOnlyWarmTransferCall(
             logger.info(f"Moving agent's call {twilio_call_sid} to conference >>> {conference_name}")
             client.calls(twilio_call_sid).update(twiml=str(twiml_agent))
             logger.info(f"Moved agent's call to conference >>> {conference_name}")
-            conference = client.conferences(conference_name).fetch()
-            participants = conference.participants.list()
-            logger.info(f"Conference Participants as of now >>> : {participants}")
         except Exception as e:
             logger.error(f"Error moving agent's call to conference: {e}")
             raise
@@ -138,7 +135,7 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Error adding supervisor to conference: {e}")
             raise
 
-        # Step 4: Wait for Conference to be Active
+        # Step 4: Wait for Conference to be Active and Log Participants
         conference_sid = None
         max_attempts = 15
         attempt = 0
@@ -148,6 +145,13 @@ class TwilioListenOnlyWarmTransferCall(
                 if conferences:
                     conference_sid = conferences[0].sid
                     logger.info(f"Conference SID retrieved: {conference_sid}")
+                    
+                    # Fetch and log participants
+                    participants = client.conferences(conference_sid).participants.list()
+                    logger.info(f"Current participants in conference {conference_name}:")
+                    for participant in participants:
+                        logger.info(f"- Participant SID: {participant.sid}, Call SID: {participant.call_sid}")
+                    
                     break
             except Exception as e:
                 logger.error(f"Error retrieving conference details: {e}")
