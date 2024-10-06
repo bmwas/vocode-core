@@ -72,9 +72,9 @@ class TwilioListenOnlyWarmTransferCall(
     def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
             action_config,
-            quiet=False,
+            quiet=False,  # Enable logging
             is_interruptible=False,
-            should_respond="always",
+            should_respond="always",  # Allow the action to respond
         )
 
     @property
@@ -102,8 +102,8 @@ class TwilioListenOnlyWarmTransferCall(
             dial_agent = Dial()
             dial_agent.conference(
                 conference_name,
-                start_conference_on_enter=True,
-                end_conference_on_exit=False,
+                start_conference_on_enter=True,  # Agent starts the conference
+                end_conference_on_exit=False,     # Conference remains active
                 beep=False
             )
             twiml_agent.append(dial_agent)
@@ -131,7 +131,7 @@ class TwilioListenOnlyWarmTransferCall(
             dial_provider = Dial()
             dial_provider.conference(
                 conference_name,
-                start_conference_on_enter=True,
+                start_conference_on_enter=False,  # Provider does not start the conference
                 end_conference_on_exit=False,
                 beep=False
             )
@@ -154,9 +154,10 @@ class TwilioListenOnlyWarmTransferCall(
             dial_supervisor = Dial()
             dial_supervisor.conference(
                 conference_name,
-                start_conference_on_enter=True,
+                start_conference_on_enter=False,  # Supervisor does not start the conference
                 end_conference_on_exit=False,
                 beep=False
+                # Do not set 'muted=True' here
             )
             twiml_supervisor.append(dial_supervisor)
             supervisor_call = client.calls.create(
@@ -223,6 +224,7 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Error muting supervisor: {e}")
             # Optionally, proceed without muting
             logger.warning("Proceeding without muting the supervisor due to API failure")
+
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
