@@ -15,7 +15,6 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-from twilio.rest import Client
 
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
@@ -104,14 +103,6 @@ class TwilioListenOnlyWarmTransferCall(
         async_requestor = AsyncRequestor()
         session = async_requestor.get_session()
 
-        # **Retrieve the Twilio Number**
-        twilio_number = self.conversation_state_manager.get_twilio_number()
-        if not twilio_number:
-            logger.error("Twilio number is not set in the conversation state manager")
-            raise Exception("Twilio number is not set")
-
-        logger.info(f"Twilio Number for outgoing calls: {twilio_number}")
-
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
@@ -138,8 +129,6 @@ class TwilioListenOnlyWarmTransferCall(
                 child_call_sid = call.get('sid')
                 call_sids_to_update.append(child_call_sid)
 
-        logger.info(f"Call SIDs to update and join conference: {call_sids_to_update}")
-
         # Update all calls to join the conference
         for call_sid in call_sids_to_update:
             update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}.json'
@@ -154,37 +143,53 @@ class TwilioListenOnlyWarmTransferCall(
                 else:
                     logger.info(f"Call {call_sid} updated to join conference {conference_name}")
 
-        # **Add Supervisor as Coach**
+        # Determine the phone number to use for adding supervisor
+        if self.conversation_state_manager.get_direction() == "outbound":
+            conf_add_phone_number = self.conversation_state_manager.get_from_phone() 
+        else:
+            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
 
-        # Ensure that 'twilio_call_sid' is the agent's Call SID
-        agent_call_sid = twilio_call_sid  # Verify this is indeed the agent's Call SID
-        logger.info(f"Agent Call SID: {agent_call_sid}")
+        if not conf_add_phone_number:
+            logger.error("Twilio 'From' phone number is not set")
+            raise Exception("Twilio 'From' phone number is not set")
 
-        # Initialize Twilio REST API client using the correct credentials
-        twilio_rest_client = Client(auth[0], auth[1], account_sid)
+        # **New TwiML to add the supervisor as a coach**
+        # Here, we set the coach parameter to the agent's Call SID (twilio_call_sid)
+        # This allows the supervisor to monitor and whisper to the agent
+        twiml_conference_coach = f'''
+        <Response>
+            <Dial>
+                <Conference coach="{twilio_call_sid}" startConferenceOnEnter="true" endConferenceOnExit="true" waitUrl="">{conference_name}</Conference>
+            </Dial>
+        </Response>
+        '''
 
-        # Add the supervisor to the conference as a coach using Twilio REST API
-        try:
-            participant = twilio_rest_client.conferences(conference_name).participants.create(
-                from_=twilio_number,          # Ensure this is your Twilio number
-                to=to_phone,                  # Supervisor's phone number
-                early_media=True,             # Optional: allows the supervisor to hear early media
-                coach=True,                   # Designate as a coach
-                call_sid_to_coach=agent_call_sid,  # Coach the agent
-                end_conference_on_exit=False  # Ensure conference doesn't end if supervisor leaves
-            )
-            logger.info(f"Supervisor {to_phone} added as coach to conference {conference_name} with Call SID {participant.call_sid}")
-        except Exception as e:
-            logger.error(f"Failed to add supervisor as coach: {str(e)}")
-            raise Exception("Failed to add supervisor as coach")
+        # Add the supervisor to the conference as a coach
+        participant_payload = {
+            'From': conf_add_phone_number,
+            'To': to_phone,
+            'Twiml': twiml_conference_coach
+        }
+
+        add_participant_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json'
+
+        async with session.post(add_participant_url, data=participant_payload, auth=auth) as response:
+            if response.status not in [200, 201]:
+                logger.error(f"Failed to call participant: {response.status} {response.reason}")
+                raise Exception("Failed to call participant")
+            else:
+                logger.info(f"Called participant {to_phone} to join conference {conference_name} as coach")
+
+                # Optionally return participant SID
+                participant_data = await response.json()
+                participant_call_sid = participant_data.get('sid')
+
+                return participant_call_sid
 
     async def run(self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
         phone_number = self.action_config.get_phone_number(action_input)
         sanitized_phone_number = sanitize_phone_number(phone_number)
-
-        logger.info(f"Twilio Call SID: {twilio_call_sid}")
-        logger.info(f"Supervisor Phone Number: {sanitized_phone_number}")
 
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
