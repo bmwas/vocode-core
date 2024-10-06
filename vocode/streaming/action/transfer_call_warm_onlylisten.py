@@ -107,6 +107,7 @@ class TwilioListenOnlyWarmTransferCall(
             )
             twiml_agent.append(dial_agent)
             client.calls(twilio_call_sid).update(twiml=str(twiml_agent))
+            await asyncio.sleep(2)  # Wait for 2 seconds
             logger.info(f"Agent's call updated to join conference {conference_name}")
         except Exception as e:
             logger.error(f"Error moving agent's call to conference: {e}")
@@ -187,6 +188,13 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Error muting supervisor: {e}")
             # Optionally, proceed without muting
             logger.warning("Proceeding without muting the supervisor due to API failure")
+
+        try:
+            conference = client.conferences(conference_name).fetch()
+            participants = conference.participants.list()
+            logger.info(f"Conference Participants : {participants}")
+        except:
+            logger.info(f"Unable to get conference participants")
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
