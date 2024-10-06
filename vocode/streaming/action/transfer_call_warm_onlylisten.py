@@ -150,11 +150,19 @@ class TwilioListenOnlyWarmTransferCall(
                     participants = client.conferences(conference_sid).participants.list()
                     logger.info(f"Current participants in conference {conference_name}:")
                     for participant in participants:
-                        logger.info(f"- Participant SID: {participant.sid}, Call SID: {participant.call_sid}")
+                        participant_info = {
+                            "call_sid": getattr(participant, 'call_sid', 'N/A'),
+                            "status": getattr(participant, 'status', 'N/A'),
+                            "start_conference_on_enter": getattr(participant, 'start_conference_on_enter', 'N/A'),
+                            "end_conference_on_exit": getattr(participant, 'end_conference_on_exit', 'N/A'),
+                            "muted": getattr(participant, 'muted', 'N/A')
+                        }
+                        logger.info(f"- Participant info: {participant_info}")
                     
                     break
             except Exception as e:
-                logger.error(f"Error retrieving conference details: {e}")
+                logger.error(f"Error retrieving conference details: {str(e)}")
+                logger.error(f"Conference retrieval attempt {attempt + 1} failed")
             await asyncio.sleep(1)
             attempt += 1
             logger.info(f"Waiting for conference {conference_name} to be active. Attempt {attempt}/{max_attempts}")
