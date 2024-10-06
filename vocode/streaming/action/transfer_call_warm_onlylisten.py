@@ -145,9 +145,9 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Determine the phone number to use for adding supervisor
         if self.conversation_state_manager.get_direction() == "outbound":
-            conf_add_phone_number = self.conversation_state_manager.get_from_phone() 
+            conf_add_phone_number = self.conversation_state_manager.get_to_phone() 
         else:
-            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
+            conf_add_phone_number = self.conversation_state_manager.get_from_phone()
 
         if not conf_add_phone_number:
             logger.error("Twilio 'From' phone number is not set")
