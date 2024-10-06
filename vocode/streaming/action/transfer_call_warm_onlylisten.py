@@ -9,6 +9,7 @@ from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
 from vocode.streaming.utils.phone_numbers import sanitize_phone_number
 
+
 # Define Parameters and Response Models
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -71,9 +72,9 @@ class TwilioListenOnlyWarmTransferCall(
     def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
             action_config,
-            quiet=True,
+            quiet=False,
             is_interruptible=False,
-            should_respond="never",
+            should_respond="always",
         )
 
     @property
@@ -91,7 +92,7 @@ class TwilioListenOnlyWarmTransferCall(
         auth_token = telephony_config.auth_token
         client = Client(account_sid, auth_token)
 
-        # Define Conference Name
+        # Define Conference Name (Consistent Naming)
         conference_name = f'Conference_{twilio_call_sid}'
 
         # Step 1: Move Agent's Call to Conference
@@ -145,9 +146,9 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Error adding provider to conference: {e}")
             raise
 
-        # Step 3: Add Supervisor to Conference (Muted)
+        # Step 3: Add Supervisor to Conference (Initially Unmuted)
         supervisor_number = sanitize_phone_number(supervisor_phone)
-        logger.info(f"Adding supervisor {supervisor_number} to conference {conference_name} as muted")
+        logger.info(f"Adding supervisor {supervisor_number} to conference {conference_name} as a listener")
         try:
             twiml_supervisor = VoiceResponse()
             dial_supervisor = Dial()
@@ -155,8 +156,7 @@ class TwilioListenOnlyWarmTransferCall(
                 conference_name,
                 start_conference_on_enter=True,
                 end_conference_on_exit=False,
-                beep=False,
-                muted=True  # Mute the supervisor upon joining
+                beep=False
             )
             twiml_supervisor.append(dial_supervisor)
             supervisor_call = client.calls.create(
@@ -190,8 +190,39 @@ class TwilioListenOnlyWarmTransferCall(
             logger.error(f"Conference {conference_name} not found after {max_attempts} attempts")
             raise Exception(f"Conference {conference_name} not found after {max_attempts} attempts")
 
-        # Since the supervisor is already muted via TwiML, no need to mute via API
-        logger.info(f"Listen-only warm transfer to supervisor {supervisor_number} completed successfully")
+        # Step 5: Wait for Supervisor to Join and Retrieve Participant SID
+        supervisor_participant_sid = None
+        max_participant_attempts = 10
+        participant_attempt = 0
+        while participant_attempt < max_participant_attempts and not supervisor_participant_sid:
+            try:
+                participants = client.conferences(conference_sid).participants.list()
+                for participant in participants:
+                    if participant.call_sid == supervisor_call.sid:
+                        supervisor_participant_sid = participant.sid
+                        logger.info(f"Supervisor's Participant SID found: {supervisor_participant_sid}")
+                        break
+            except Exception as e:
+                logger.error(f"Error retrieving conference participants: {e}")
+            if supervisor_participant_sid:
+                break
+            await asyncio.sleep(1)
+            participant_attempt += 1
+            logger.info(f"Waiting for supervisor to join the conference. Attempt {participant_attempt}/{max_participant_attempts}")
+
+        if not supervisor_participant_sid:
+            logger.warning("Supervisor's Participant SID not found after maximum attempts")
+            # Proceed without muting
+            return
+
+        # Step 6: Mute Supervisor via REST API
+        try:
+            client.conferences(conference_sid).participants(supervisor_participant_sid).update(muted=True)
+            logger.info(f"Supervisor {supervisor_number} has been muted in conference {conference_name}")
+        except Exception as e:
+            logger.error(f"Error muting supervisor: {e}")
+            # Optionally, proceed without muting
+            logger.warning("Proceeding without muting the supervisor due to API failure")
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
