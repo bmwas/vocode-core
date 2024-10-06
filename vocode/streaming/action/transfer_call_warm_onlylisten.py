@@ -71,9 +71,9 @@ class TwilioListenOnlyWarmTransferCall(
     def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
             action_config,
-            quiet=False,
+            quiet=True,
             is_interruptible=False,
-            should_respond="always",
+            should_respond="never",
         )
 
     @property
