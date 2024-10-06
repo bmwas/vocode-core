@@ -3,7 +3,6 @@ import asyncio
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
 from twilio.rest import Client
-from twilio.twiml.voice_response import VoiceResponse, Dial, Conference
 from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
 from vocode.streaming.models.actions import ActionInput, ActionOutput
@@ -110,7 +109,13 @@ class TwilioListenOnlyWarmTransferCall(
             raise
 
         # Step 2: Add Agent to the Conference (without updating their call)
-        agent_phone = self.conversation_state_manager.get_from_phone() if self.conversation_state_manager.get_direction() == "outbound" else self.conversation_state_manager.get_to_phone()
+        # Determine Agent's Phone Number based on call direction
+        direction = self.conversation_state_manager.get_direction()
+        if direction == "outbound":
+            agent_phone = self.conversation_state_manager.get_from_phone()
+        else:
+            agent_phone = self.conversation_state_manager.get_to_phone()
+
         if not agent_phone:
             logger.error("Agent phone number is not set")
             raise Exception("Agent phone number is not set")
@@ -129,7 +134,6 @@ class TwilioListenOnlyWarmTransferCall(
             raise
 
         # Step 3: Add Provider to Conference
-        direction = self.conversation_state_manager.get_direction()
         provider_phone = self.conversation_state_manager.get_to_phone() if direction == "outbound" else self.conversation_state_manager.get_from_phone()
         if not provider_phone:
             logger.error("Provider phone number is not set")
@@ -171,6 +175,7 @@ class TwilioListenOnlyWarmTransferCall(
             # Optionally, proceed without muting
             logger.warning("Proceeding without muting the supervisor due to API failure")
 
+
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
@@ -199,8 +204,4 @@ class TwilioListenOnlyWarmTransferCall(
                 response=ListenOnlyWarmTransferCallResponse(success=True),
             )
         except Exception as e:
-            logger.error(f"Error during listen-only warm transfer: {e}")
-            return ActionOutput(
-                action_type=action_input.action_config.type,
-                response=ListenOnlyWarmTransferCallResponse(success=False),
-            )
+            logger.error
