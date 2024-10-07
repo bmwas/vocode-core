@@ -84,14 +84,31 @@ class TwilioPhoneConversation(AbstractPhoneConversation[TwilioOutputDevice]):
         self.twilio_sid = twilio_sid
         self.record_call = record_call
 
+        # Log initialization details
+        logger.debug("Initialized TwilioPhoneConversation with the following parameters:")
+        logger.debug(f"Direction: {direction}")
+        logger.debug(f"From Phone: {from_phone}")
+        logger.debug(f"To Phone: {to_phone}")
+        logger.debug(f"Base URL: {base_url}")
+        logger.debug(f"Twilio SID: {twilio_sid}")
+        logger.debug(f"Record Call: {record_call}")
+        logger.debug(f"Speed Coefficient: {speed_coefficient}")
+        logger.debug(f"Noise Suppression: {noise_suppression}")
+
     def create_state_manager(self) -> TwilioPhoneConversationStateManager:
+        logger.debug("Creating TwilioPhoneConversationStateManager.")
         return TwilioPhoneConversationStateManager(self)
 
     async def attach_ws_and_start(self, ws: WebSocket):
+        logger.info("Attaching WebSocket and starting conversation.")
         super().attach_ws(ws)
 
         await self._wait_for_twilio_start(ws)
+        logger.info("Twilio 'start' event received. Beginning conversation.")
         await self.start()
+        logger.info("Conversation started successfully.")
+
+        # Publish event for connected phone call
         self.events_manager.publish_event(
             PhoneCallConnectedEvent(
                 conversation_id=self.id,
@@ -99,40 +116,102 @@ class TwilioPhoneConversation(AbstractPhoneConversation[TwilioOutputDevice]):
                 from_phone_number=self.from_phone,
             )
         )
-        while self.is_active():
-            message = await ws.receive_text()
-            response = await self._handle_ws_message(message)
-            if response == TwilioPhoneConversationWebsocketAction.CLOSE_WEBSOCKET:
-                break
-        await ws.close(code=1000, reason=None)
-        await self.terminate()
+        logger.info("Published PhoneCallConnectedEvent.")
+
+        try:
+            while self.is_active():
+                try:
+                    message = await ws.receive_text()
+                    logger.debug(f"Received WebSocket message: {message}")
+                    response = await self._handle_ws_message(message)
+                    if response == TwilioPhoneConversationWebsocketAction.CLOSE_WEBSOCKET:
+                        logger.info("Received CLOSE_WEBSOCKET action. Breaking loop.")
+                        break
+                except Exception as e:
+                    logger.error(f"Exception while handling WebSocket message: {str(e)}")
+                    break
+        except Exception as e:
+            logger.error(f"Exception in WebSocket loop: {str(e)}")
+        finally:
+            await ws.close(code=1000, reason="Conversation terminated.")
+            logger.info("WebSocket closed. Terminating conversation.")
+            await self.terminate()
+            logger.info("Conversation terminated.")
 
     async def _wait_for_twilio_start(self, ws: WebSocket):
+        logger.info("Waiting for Twilio 'start' event.")
         assert isinstance(self.output_device, TwilioOutputDevice)
         while True:
-            message = await ws.receive_text()
-            if not message:
-                continue
-            data = json.loads(message)
-            if data["event"] == "start":
-                logger.debug(f"Media WS: Received event '{data['event']}': {message}")
-                self.output_device.stream_sid = data["start"]["streamSid"]
-                break
+            try:
+                message = await ws.receive_text()
+                if not message:
+                    logger.warning("Received empty message while waiting for 'start' event.")
+                    continue
+                data = json.loads(message)
+                logger.debug(f"Received message while waiting for 'start': {data}")
+                if data.get("event") == "start":
+                    logger.debug(f"Media WS: Received event 'start': {message}")
+                    self.output_device.stream_sid = data["start"]["streamSid"]
+                    logger.info(f"Assigned stream SID: {self.output_device.stream_sid}")
+                    break
+            except json.JSONDecodeError:
+                logger.error(f"Failed to decode JSON message: {message}")
+            except KeyError as e:
+                logger.error(f"Missing expected key {e} in message: {message}")
+            except Exception as e:
+                logger.error(f"Unexpected error while waiting for 'start' event: {str(e)}")
 
     async def _handle_ws_message(self, message) -> Optional[TwilioPhoneConversationWebsocketAction]:
         if message is None:
+            logger.warning("Received None message.")
             return TwilioPhoneConversationWebsocketAction.CLOSE_WEBSOCKET
 
-        data = json.loads(message)
-        if data["event"] == "media":
-            media = data["media"]
-            chunk = base64.b64decode(media["payload"])
-            self.receive_audio(chunk)
-        if data["event"] == "mark":
-            chunk_id = data["mark"]["name"]
+        try:
+            data = json.loads(message)
+            logger.debug(f"Parsed WebSocket message: {data}")
+        except json.JSONDecodeError:
+            logger.error(f"Failed to decode JSON message: {message}")
+            return None  # Decide how to handle malformed messages
+
+        event_type = data.get("event")
+        if not event_type:
+            logger.warning(f"No 'event' field in message: {data}")
+            return None
+
+        logger.info(f"Handling event: {event_type}")
+
+        if event_type == "media":
+            media = data.get("media")
+            if not media:
+                logger.warning(f"No 'media' field in 'media' event: {data}")
+                return None
+            payload = media.get("payload")
+            if not payload:
+                logger.warning(f"No 'payload' in 'media' event: {data}")
+                return None
+            try:
+                chunk = base64.b64decode(payload)
+                logger.debug(f"Decoded audio chunk of size {len(chunk)} bytes.")
+                self.receive_audio(chunk)
+                logger.debug("Audio chunk received and processed.")
+            except base64.binascii.Error as e:
+                logger.error(f"Base64 decoding error: {str(e)}")
+        elif event_type == "mark":
+            mark = data.get("mark")
+            if not mark:
+                logger.warning(f"No 'mark' field in 'mark' event: {data}")
+                return None
+            chunk_id = mark.get("name")
+            if not chunk_id:
+                logger.warning(f"No 'name' in 'mark' event: {data}")
+                return None
             self.output_device.enqueue_mark_message(ChunkFinishedMarkMessage(chunk_id=chunk_id))
-        elif data["event"] == "stop":
+            logger.debug(f"Enqueued mark message with chunk_id: {chunk_id}")
+        elif event_type == "stop":
             logger.debug(f"Media WS: Received event 'stop': {message}")
-            logger.debug("Stopping...")
+            logger.debug("Stopping conversation as per 'stop' event.")
             return TwilioPhoneConversationWebsocketAction.CLOSE_WEBSOCKET
+        else:
+            logger.warning(f"Unhandled event type: {event_type}")
+
         return None
