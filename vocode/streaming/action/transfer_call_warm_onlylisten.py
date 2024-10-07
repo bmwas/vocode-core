@@ -100,77 +100,45 @@ class TwilioListenOnlyWarmTransferCall(
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
-        async_requestor = AsyncRequestor()
-        session = async_requestor.get_session()
-
+        
         # Create a unique conference name
         conference_name = f'Conference_{twilio_call_sid}_{int(time.time())}'
 
-        # TwiML to join the conference (for agent and provider)
-        twiml_conference = f'''
-        <Response>
-            <Dial>
-                <Conference startConferenceOnEnter="true" endConferenceOnExit="false" waitUrl="">{conference_name}</Conference>
-            </Dial>
-        </Response>
-        '''
+        # Use the Twilio REST API client
+        from twilio.rest import Client
+        twilio_rest_client = Client(auth[0], auth[1], account_sid)
 
-        # Fetch child calls and update to join conference
-        call_sids_to_update = [twilio_call_sid]
-        calls_list_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json?ParentCallSid={twilio_call_sid}'
-
-        async with session.get(calls_list_url, auth=auth) as response:
-            if response.status != 200:
-                logger.error(f"Failed to fetch child calls: {response.status} {response.reason}")
-                raise Exception("Failed to fetch child calls")
-            calls_data = await response.json()
-            child_calls = calls_data.get('calls', [])
-            for call in child_calls:
-                child_call_sid = call.get('sid')
-                call_sids_to_update.append(child_call_sid)
-
-        # Update all calls to join the conference
-        for call_sid in call_sids_to_update:
-            update_call_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{call_sid}.json'
-            update_payload = {
-                'Twiml': twiml_conference
-            }
-
-            async with session.post(update_call_url, data=update_payload, auth=auth) as response:
-                if response.status not in [200, 201, 204]:
-                    logger.error(f"Failed to update call {call_sid}: {response.status} {response.reason}")
-                    raise Exception(f"Failed to update call {call_sid}")
-                else:
-                    logger.info(f"Call {call_sid} updated to join conference {conference_name}")
-
-        # Determine the phone number to use for adding supervisor
-        if self.conversation_state_manager.get_direction() == "outbound":
-            conf_add_phone_number = self.conversation_state_manager.get_from_phone()
-        else:
-            conf_add_phone_number = self.conversation_state_manager.get_to_phone()
+        # Get the Twilio number to use
         import os
-        conf_add_phone_number = os.environ.get("OUTBOUND_CALLER_NUMBER")
-        if not conf_add_phone_number:
+        
+        twilio_number = os.environ.get("OUTBOUND_CALLER_NUMBER")
+        if not twilio_number:
             logger.error("Twilio 'From' phone number is not set")
             raise Exception("Twilio 'From' phone number is not set")
 
-        # Initialize Twilio REST API client
-        
-        twilio_rest_client = Client(auth[0], auth[1], account_sid)
-
-        # Ensure 'agent_call_sid' is correctly assigned
+        # Agent is already connected to the conference via initial call
         agent_call_sid = twilio_call_sid  # The agent's Call SID
 
+        # Dial the provider into the conference
+        provider_phone_number = self.conversation_state_manager.get_to_phone()
+        provider_call = twilio_rest_client.calls.create(
+            to=provider_phone_number,
+            from_=twilio_number,
+            url=f'https://your-server.com/join_conference?ConferenceName={conference_name}',
+            method='POST'
+        )
+        logger.info(f"Provider {provider_phone_number} dialed into conference {conference_name} with Call SID {provider_call.sid}")
+
+        # Add the supervisor as a coach
+        supervisor_phone_number = to_phone
         try:
-            # Add supervisor as a coach
             participant = twilio_rest_client.conferences(conference_name).participants.create(
-                from_=conf_add_phone_number,   # Must be a valid Twilio number
-                to=to_phone,                   # Supervisor's phone number
-                coaching=True,
-                call_sid_to_coach=agent_call_sid,
-                end_conference_on_exit=False
+                from_=twilio_number,
+                to=supervisor_phone_number,
+                coach=True,
+                call_sid_to_coach=agent_call_sid
             )
-            logger.info(f"Supervisor {to_phone} added as coach to conference {conference_name} with Call SID {participant.call_sid}")
+            logger.info(f"Supervisor {supervisor_phone_number} added as coach to conference {conference_name} with Call SID {participant.call_sid}")
         except Exception as e:
             logger.error(f"Failed to add supervisor as coach: {str(e)}")
             raise Exception("Failed to add supervisor as coach")
