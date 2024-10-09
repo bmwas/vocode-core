@@ -117,7 +117,6 @@ class TwilioListenOnlyWarmTransferCall(
         payload = {
             'Url': websocket_server_address,
             'Track': 'both_tracks',
-            'Parameter': 'sip'  # This specifies the WebSocket subprotocol
         }
 
         async with session.post(start_stream_url, data=payload, auth=auth) as response:

@@ -1,13 +1,11 @@
-"""
-A small websockets server for testing twilio streaming capability - see the streaming/listening action.
-
-"""
-
 import asyncio
 import websockets
 import json
 import logging
 from datetime import datetime
+import base64
+import numpy as np
+import sounddevice as sd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,20 +22,84 @@ def log_event(event_type, details=None):
 async def handle_call(websocket, path):
     client_ip = websocket.remote_address[0]
     log_event("Connection Established", f"Client IP: {client_ip}, Path: {path}")
-
+    
+    # Set up audio stream for stereo output
+    sample_rate = 8000  # Twilio streams audio at 8000 Hz
+    channels = 2        # Stereo audio (left and right channels)
+    try:
+        stream = sd.OutputStream(samplerate=sample_rate, channels=channels, dtype='int16')
+        stream.start()
+        log_event("Audio Stream Started", "Audio playback stream has been started")
+    except Exception as e:
+        log_event("Error", f"Could not open audio stream: {str(e)}")
+        return
+    
+    # Initialize buffers for inbound and outbound audio
+    inbound_buffer = []
+    outbound_buffer = []
+    
     try:
         async for message in websocket:
             try:
                 data = json.loads(message)
-                log_event("Message Received", f"Data: {data}")
                 
-                # You can add more specific logging based on the message content
-                if 'event' in data:
+                if 'event' in data and data['event'] == 'media':
+                    # Extract and decode the audio payload
+                    payload = data['media']['payload']
+                    audio_data = base64.b64decode(payload)
+                    # Convert to numpy array
+                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                    
+                    # Identify the track (inbound or outbound)
+                    track = data['media'].get('track', 'unknown')
+                    if track == 'inbound':
+                        # Append to the inbound buffer
+                        inbound_buffer.append(audio_array)
+                    elif track == 'outbound':
+                        # Append to the outbound buffer
+                        outbound_buffer.append(audio_array)
+                    else:
+                        log_event("Unknown Track", f"Track: {track}")
+                        continue
+
+                    # Synchronize and play audio
+                    while inbound_buffer and outbound_buffer:
+                        # Get the next chunks from both buffers
+                        inbound_chunk = inbound_buffer.pop(0)
+                        outbound_chunk = outbound_buffer.pop(0)
+                        
+                        # Make sure both chunks are the same length
+                        min_length = min(len(inbound_chunk), len(outbound_chunk))
+                        inbound_chunk = inbound_chunk[:min_length]
+                        outbound_chunk = outbound_chunk[:min_length]
+                        
+                        # Stack the chunks to form stereo audio
+                        stereo_audio = np.column_stack((inbound_chunk, outbound_chunk))
+                        # Write to the audio stream
+                        stream.write(stereo_audio)
+                    
+                    # Handle any remaining chunks in the buffers
+                    # If one buffer has more data than the other, pad the missing channel with zeros
+                    if inbound_buffer and not outbound_buffer:
+                        while inbound_buffer:
+                            inbound_chunk = inbound_buffer.pop(0)
+                            zero_chunk = np.zeros(len(inbound_chunk), dtype=np.int16)
+                            stereo_audio = np.column_stack((inbound_chunk, zero_chunk))
+                            stream.write(stereo_audio)
+                    elif outbound_buffer and not inbound_buffer:
+                        while outbound_buffer:
+                            outbound_chunk = outbound_buffer.pop(0)
+                            zero_chunk = np.zeros(len(outbound_chunk), dtype=np.int16)
+                            stereo_audio = np.column_stack((zero_chunk, outbound_chunk))
+                            stream.write(stereo_audio)
+                elif 'event' in data:
                     log_event(f"Twilio Event", f"Event Type: {data['event']}")
-                
+                else:
+                    log_event("Unknown Message", f"Data: {data}")
             except json.JSONDecodeError:
                 log_event("Error", f"Invalid JSON received: {message}")
-
+            except Exception as e:
+                log_event("Error", f"Error processing message: {str(e)}")
     except websockets.exceptions.ConnectionClosedOK:
         log_event("Connection Closed", "Client disconnected normally")
     except websockets.exceptions.ConnectionClosedError as e:
@@ -45,6 +107,10 @@ async def handle_call(websocket, path):
     except Exception as e:
         log_event("Error", f"Unexpected error: {str(e)}")
     finally:
+        # Stop and close the audio stream
+        stream.stop()
+        stream.close()
+        log_event("Audio Stream Stopped", "Audio playback stream has been stopped")
         log_event("Connection Terminated", f"Client IP: {client_ip}")
 
 async def main():
