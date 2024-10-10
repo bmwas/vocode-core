@@ -6,6 +6,7 @@ from datetime import datetime
 import base64
 import numpy as np
 import sounddevice as sd
+import audioop  # Added for μ-law decoding
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,10 +25,11 @@ async def handle_call(websocket, path):
     log_event("Connection Established", f"Client IP: {client_ip}, Path: {path}")
     
     # Set up audio stream for stereo output
-    sample_rate = 8000  # Twilio streams audio at 8000 Hz
+    sample_rate = 8000  # μ-law streams typically use 8000 Hz
     channels = 2        # Stereo audio (left and right channels)
+    dtype = 'int16'     # PCM 16-bit
     try:
-        stream = sd.OutputStream(samplerate=sample_rate, channels=channels, dtype='int16')
+        stream = sd.OutputStream(samplerate=sample_rate, channels=channels, dtype=dtype)
         stream.start()
         log_event("Audio Stream Started", "Audio playback stream has been started")
     except Exception as e:
@@ -47,8 +49,16 @@ async def handle_call(websocket, path):
                     # Extract and decode the audio payload
                     payload = data['media']['payload']
                     audio_data = base64.b64decode(payload)
+                    
+                    # Decode μ-law to PCM
+                    try:
+                        decoded_pcm = audioop.ulaw2lin(audio_data, 2)  # 2 bytes per sample for int16
+                    except audioop.error as e:
+                        log_event("Decoding Error", f"μ-law decoding failed: {str(e)}")
+                        continue
+                    
                     # Convert to numpy array
-                    audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                    audio_array = np.frombuffer(decoded_pcm, dtype=np.int16)
                     
                     # Identify the track (inbound or outbound)
                     track = data['media'].get('track', 'unknown')
@@ -128,3 +138,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
