@@ -1,141 +1,115 @@
 import asyncio
 import websockets
 import json
-import logging
-from datetime import datetime
 import base64
-import numpy as np
-import sounddevice as sd
-import audioop  # Added for μ-law decoding
+import audioop
+import pyaudio
+from loguru import logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Audio parameters
+SAMPLE_RATE = 8000  # Hz
+CHANNELS = 1
+SAMPLE_WIDTH = 2  # Bytes per sample after decoding (16-bit PCM)
+FRAMES_PER_BUFFER = 512  # Reduced from 1024 to decrease latency
+SCALE_FACTOR = 0.5  # Scaling factor to prevent clipping when mixing
 
-def log_event(event_type, details=None):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_message = f"{timestamp} - {event_type}"
-    if details:
-        log_message += f": {details}"
-    print(log_message)
-    logger.info(log_message)
+# Initialize PyAudio
+p = pyaudio.PyAudio()
 
-async def handle_call(websocket, path):
-    client_ip = websocket.remote_address[0]
-    log_event("Connection Established", f"Client IP: {client_ip}, Path: {path}")
-    
-    # Set up audio stream for stereo output
-    sample_rate = 8000  # μ-law streams typically use 8000 Hz
-    channels = 2        # Stereo audio (left and right channels)
-    dtype = 'int16'     # PCM 16-bit
-    try:
-        stream = sd.OutputStream(samplerate=sample_rate, channels=channels, dtype=dtype)
-        stream.start()
-        log_event("Audio Stream Started", "Audio playback stream has been started")
-    except Exception as e:
-        log_event("Error", f"Could not open audio stream: {str(e)}")
-        return
-    
-    # Initialize buffers for inbound and outbound audio
-    inbound_buffer = []
-    outbound_buffer = []
-    
+stream = p.open(format=p.get_format_from_width(SAMPLE_WIDTH),
+                channels=CHANNELS,
+                rate=SAMPLE_RATE,
+                output=True,
+                frames_per_buffer=FRAMES_PER_BUFFER)
+
+# Buffers to hold inbound and outbound audio data
+inbound_buffer = b''
+outbound_buffer = b''
+
+async def handle_connection(websocket, path):
+    logger.info("Client connected")
+    global inbound_buffer, outbound_buffer
     try:
         async for message in websocket:
-            try:
-                data = json.loads(message)
-                
-                if 'event' in data and data['event'] == 'media':
-                    # Extract and decode the audio payload
-                    payload = data['media']['payload']
-                    audio_data = base64.b64decode(payload)
-                    
-                    # Decode μ-law to PCM
+            data = json.loads(message)
+
+            if data.get('event') == 'media':
+                media = data.get('media', {})
+                payload = media.get('payload', '')
+                track = media.get('track', '')
+
+                if not payload:
+                    continue  # Skip if payload is empty
+
+                # Decode base64 payload
+                try:
+                    mulaw_audio = base64.b64decode(payload)
+                except base64.binascii.Error as e:
+                    logger.error(f"Base64 decoding error: {e}")
+                    continue
+
+                # Convert mulaw to linear PCM (16-bit signed integers)
+                try:
+                    pcm_audio = audioop.ulaw2lin(mulaw_audio, SAMPLE_WIDTH)
+                except audioop.error as e:
+                    logger.error(f"Audio decoding error: {e}")
+                    continue
+
+                # Append to the appropriate buffer
+                if track == 'inbound':
+                    inbound_buffer += pcm_audio
+                elif track == 'outbound':
+                    outbound_buffer += pcm_audio
+
+                # Determine the minimum length available in both buffers
+                min_length = min(len(inbound_buffer), len(outbound_buffer))
+
+                if min_length >= FRAMES_PER_BUFFER * SAMPLE_WIDTH:
+                    # Extract chunks of FRAMES_PER_BUFFER
+                    chunk_size = FRAMES_PER_BUFFER * SAMPLE_WIDTH
+                    inbound_chunk = inbound_buffer[:chunk_size]
+                    outbound_chunk = outbound_buffer[:chunk_size]
+
+                    # Remove the used data from the buffers
+                    inbound_buffer = inbound_buffer[chunk_size:]
+                    outbound_buffer = outbound_buffer[chunk_size:]
+
+                    # Scale each chunk to prevent clipping
+                    inbound_scaled = audioop.mul(inbound_chunk, SAMPLE_WIDTH, SCALE_FACTOR)
+                    outbound_scaled = audioop.mul(outbound_chunk, SAMPLE_WIDTH, SCALE_FACTOR)
+
+                    # Mix the two chunks
                     try:
-                        decoded_pcm = audioop.ulaw2lin(audio_data, 2)  # 2 bytes per sample for int16
+                        mixed_chunk = audioop.add(inbound_scaled, outbound_scaled, SAMPLE_WIDTH)
                     except audioop.error as e:
-                        log_event("Decoding Error", f"μ-law decoding failed: {str(e)}")
-                        continue
-                    
-                    # Convert to numpy array
-                    audio_array = np.frombuffer(decoded_pcm, dtype=np.int16)
-                    
-                    # Identify the track (inbound or outbound)
-                    track = data['media'].get('track', 'unknown')
-                    if track == 'inbound':
-                        # Append to the inbound buffer
-                        inbound_buffer.append(audio_array)
-                    elif track == 'outbound':
-                        # Append to the outbound buffer
-                        outbound_buffer.append(audio_array)
-                    else:
-                        log_event("Unknown Track", f"Track: {track}")
+                        logger.error(f"Audio mixing error: {e}")
                         continue
 
-                    # Synchronize and play audio
-                    while inbound_buffer and outbound_buffer:
-                        # Get the next chunks from both buffers
-                        inbound_chunk = inbound_buffer.pop(0)
-                        outbound_chunk = outbound_buffer.pop(0)
-                        
-                        # Make sure both chunks are the same length
-                        min_length = min(len(inbound_chunk), len(outbound_chunk))
-                        inbound_chunk = inbound_chunk[:min_length]
-                        outbound_chunk = outbound_chunk[:min_length]
-                        
-                        # Stack the chunks to form stereo audio
-                        stereo_audio = np.column_stack((inbound_chunk, outbound_chunk))
-                        # Write to the audio stream
-                        stream.write(stereo_audio)
-                    
-                    # Handle any remaining chunks in the buffers
-                    # If one buffer has more data than the other, pad the missing channel with zeros
-                    if inbound_buffer and not outbound_buffer:
-                        while inbound_buffer:
-                            inbound_chunk = inbound_buffer.pop(0)
-                            zero_chunk = np.zeros(len(inbound_chunk), dtype=np.int16)
-                            stereo_audio = np.column_stack((inbound_chunk, zero_chunk))
-                            stream.write(stereo_audio)
-                    elif outbound_buffer and not inbound_buffer:
-                        while outbound_buffer:
-                            outbound_chunk = outbound_buffer.pop(0)
-                            zero_chunk = np.zeros(len(outbound_chunk), dtype=np.int16)
-                            stereo_audio = np.column_stack((zero_chunk, outbound_chunk))
-                            stream.write(stereo_audio)
-                elif 'event' in data:
-                    log_event(f"Twilio Event", f"Event Type: {data['event']}")
+                    # Write mixed audio data to the stream
+                    try:
+                        stream.write(mixed_chunk)
+                    except Exception as e:
+                        logger.error(f"Audio playback error: {e}")
                 else:
-                    log_event("Unknown Message", f"Data: {data}")
-            except json.JSONDecodeError:
-                log_event("Error", f"Invalid JSON received: {message}")
-            except Exception as e:
-                log_event("Error", f"Error processing message: {str(e)}")
-    except websockets.exceptions.ConnectionClosedOK:
-        log_event("Connection Closed", "Client disconnected normally")
-    except websockets.exceptions.ConnectionClosedError as e:
-        log_event("Connection Error", f"Abnormal closure: {e}")
-    except Exception as e:
-        log_event("Error", f"Unexpected error: {str(e)}")
+                    # If not enough data to fill the buffer, skip to prevent lag
+                    continue
+
+            elif data.get('event') == 'start':
+                logger.info("Stream started")
+            elif data.get('event') == 'stop':
+                logger.info("Stream stopped")
+                break
+    except websockets.exceptions.ConnectionClosed:
+        logger.info("Client disconnected")
     finally:
-        # Stop and close the audio stream
-        stream.stop()
+        stream.stop_stream()
         stream.close()
-        log_event("Audio Stream Stopped", "Audio playback stream has been stopped")
-        log_event("Connection Terminated", f"Client IP: {client_ip}")
+        p.terminate()
 
 async def main():
-    server = await websockets.serve(handle_call, "localhost", 8000)
-    log_event("Server Started", "WebSocket server is running on ws://localhost:8000")
-    
-    try:
-        await server.wait_closed()
-    except KeyboardInterrupt:
-        log_event("Server Shutdown", "Keyboard interrupt received")
-    finally:
-        server.close()
-        await server.wait_closed()
-        log_event("Server Shutdown", "WebSocket server has been shut down")
+    server = await websockets.serve(handle_connection, '0.0.0.0', 8080)
+    logger.info("WebSocket server started on ws://0.0.0.0:8080")
+    await server.wait_closed()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
-
