@@ -1,4 +1,4 @@
-from typing import Literal, Type
+from typing import Literal, Type, Optional  # Added Optional to imports
 import asyncio
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -30,14 +30,14 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  # type: ignore
-    inbound_websocket_server_address: Optional[str] = Field(
-        None, description="The inbound websocket server address to forward the call audio to"
+    inbound_websocket_server_address: str = Field(
+        ..., description="The inbound websocket server address to forward the call audio to"
     )
-    coach_phone_number: Optional[str] = Field(
-        None, description="The coach's phone number where Twilio will send the stream"
+    coach_phone_number: str = Field(
+        ..., description="The coach's phone number where Twilio will send the stream"
     )
-    outbound_websocket_server_address: Optional[str] = Field(
-        None, description="The outbound websocket server address for the coach's call"
+    outbound_websocket_server_address: str = Field(
+        ..., description="The outbound websocket server address for the coach's call"
     )
 
     def get_inbound_websocket_server_address(self, input: ActionInput) -> str:
