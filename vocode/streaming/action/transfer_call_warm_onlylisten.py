@@ -223,4 +223,56 @@ class TwilioListenOnlyWarmTransferCall(
         def make_call():
             client = Client(ACCOUNT_SID, AUTH_TOKEN)
             coach_call = client.calls.create(
-                to=coach_phon
+                to=coach_phone_number,
+                from_=TWILIO_STREAM_NUMBER,
+                twiml=twiml
+            )
+            logger.info(f"Placed call to coach at {coach_phone_number} with Call SID: {coach_call.sid}")
+            return coach_call
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, make_call)
+
+    async def run(
+        self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
+    ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
+        """
+        Executes the action to start streaming call audio.
+
+        Args:
+            action_input (ActionInput[ListenOnlyWarmTransferCallParameters]): The input for the action.
+
+        Returns:
+            ActionOutput[ListenOnlyWarmTransferCallResponse]: The result of the action.
+        """
+        twilio_call_sid = self.get_twilio_sid(action_input)
+        coach_phone_number = self.action_config.get_coach_phone_number(
+            action_input
+        )
+
+        if action_input.user_message_tracker is not None:
+            await action_input.user_message_tracker.wait()
+
+            logger.info(
+                "Finished waiting for user message tracker, now attempting to start streaming"
+            )
+
+            if self.conversation_state_manager.transcript.was_last_message_interrupted():
+                logger.info("Last bot message was interrupted, not starting stream")
+                return ActionOutput(
+                    action_type=action_input.action_config.type,
+                    response=ListenOnlyWarmTransferCallResponse(success=False, message="User interrupted"),
+                )
+
+        try:
+            await self.start_stream(twilio_call_sid, coach_phone_number)
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=True),
+            )
+        except Exception as e:
+            logger.error(f"Exception occurred while starting stream: {e}")
+            return ActionOutput(
+                action_type=action_input.action_config.type,
+                response=ListenOnlyWarmTransferCallResponse(success=False, message=str(e)),
+            )
