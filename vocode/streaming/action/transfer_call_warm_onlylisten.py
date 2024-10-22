@@ -18,8 +18,8 @@ from vocode.streaming.utils.state_manager import (
 
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
-    pass
-
+    outbound_websocket_server_address: str = None
+    coach_phone_number: str = None
 
 class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
     websocket_server_address: str = Field(
