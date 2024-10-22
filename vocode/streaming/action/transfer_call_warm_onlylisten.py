@@ -71,6 +71,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
             AssertionError: If the coach's phone number is not set in the configuration when parameters are empty.
         """
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
+            print("Passed Coach Phone # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",input.params.coach_phone_number)
             return input.params.coach_phone_number
         elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
             assert self.coach_phone_number, "coach_phone_number must be set"
