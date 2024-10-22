@@ -43,8 +43,8 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  # type: ignore
-    coach_phone_number: Optional[str] = Field(
-        None, description="The phone number of the coach to listen"
+    coach_phone_number: str = Field(
+        ..., description="The phone number of the coach to listen"
     )
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
@@ -116,13 +116,12 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Build the URL to start the stream
         start_stream_url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls/{twilio_call_sid}/Streams.json'
-        import os
         # Prepare the payload
         payload = {
             'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
             'Track': 'both_tracks',
         }
-        print("Twilio Client >>>>>>>>>>>>>> ", twilio_client)
+        print("Coach Phone # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ", coach_phone_number)
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(
