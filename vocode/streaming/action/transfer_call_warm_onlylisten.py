@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Type, Union
+from typing import Literal, Optional, Type
 import time
 import asyncio
 from loguru import logger
@@ -17,27 +17,19 @@ from vocode.streaming.utils.state_manager import (
 )
 
 
-class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
-    outbound_websocket_server_address: Optional[str] = None
-    coach_phone_number: Optional[str] = None
-    websocket_server_address: Optional[str] = None
-
-
-class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
-    websocket_server_address: str = Field(
-        ..., description="The websocket server address to forward the call audio to"
+class ListenOnlyWarmTransferCallParameters(BaseModel):
+    websocket_server_address: Optional[str] = Field(
+        None, description="The websocket server address to forward the call audio to"
     )
     coach_phone_number: Optional[str] = Field(
         None, description="The phone number of the coach to call"
     )
     outbound_websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address for outbound audio stream"
-    )    
+    )
 
-
-ListenOnlyWarmTransferCallParameters = Union[
-    ListenOnlyWarmTransferCallEmptyParameters, ListenOnlyWarmTransferCallRequiredParameters
-]
+    class Config:
+        extra = 'allow'
 
 
 class ListenOnlyWarmTransferCallResponse(BaseModel):
@@ -55,53 +47,31 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     )
     outbound_websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address for outbound audio stream"
-    )        
+    )
+
+    class Config:
+        extra = 'allow'
 
     def get_websocket_server_address(self, input: ActionInput) -> str:
-        # First check input parameters
-        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
-            if input.params.websocket_server_address:
-                return input.params.websocket_server_address
-        
-        # Then check config
-        if self.websocket_server_address:
-            return self.websocket_server_address
-            
-        # Finally check empty parameters
-        if isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
-            if input.params.websocket_server_address:
-                return input.params.websocket_server_address
-            
-        raise ValueError("websocket_server_address must be provided")
-    
+        value = input.params.websocket_server_address or self.websocket_server_address
+        if value:
+            return value
+        else:
+            raise ValueError("websocket_server_address must be provided")
+
     def get_outbound_websocket_server_address(self, input: ActionInput) -> str:
-        # First check input parameters
-        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
-            if input.params.outbound_websocket_server_address:
-                return input.params.outbound_websocket_server_address
-        
-        # Then check config
-        if self.outbound_websocket_server_address:
-            return self.outbound_websocket_server_address
-            
-        # Finally check empty parameters
-        if isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
-            if input.params.outbound_websocket_server_address:
-                return input.params.outbound_websocket_server_address
-            
-        raise ValueError("outbound_websocket_server_address must be provided")
+        value = input.params.outbound_websocket_server_address or self.outbound_websocket_server_address
+        if value:
+            return value
+        else:
+            raise ValueError("outbound_websocket_server_address must be provided")
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
-        # First check input parameters
-        if isinstance(input.params, (ListenOnlyWarmTransferCallRequiredParameters, ListenOnlyWarmTransferCallEmptyParameters)):
-            if input.params.coach_phone_number:
-                return input.params.coach_phone_number
-        
-        # Then check config
-        if self.coach_phone_number:
-            return self.coach_phone_number
-            
-        raise ValueError("coach_phone_number must be provided")          
+        value = input.params.coach_phone_number or self.coach_phone_number
+        if value:
+            return value
+        else:
+            raise ValueError("coach_phone_number must be provided")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         websocket_server_address = self.get_websocket_server_address(input)
@@ -139,10 +109,7 @@ class TwilioListenOnlyWarmTransferCall(
 
     @property
     def parameters_type(self) -> Type[ListenOnlyWarmTransferCallParameters]:
-        if self.action_config.websocket_server_address:
-            return ListenOnlyWarmTransferCallEmptyParameters
-        else:
-            return ListenOnlyWarmTransferCallRequiredParameters
+        return ListenOnlyWarmTransferCallParameters
 
     def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
@@ -181,7 +148,7 @@ class TwilioListenOnlyWarmTransferCall(
                 from twilio.rest import Client
                 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
                 import os
-                
+
                 ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
                 AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
                 TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
@@ -201,7 +168,7 @@ class TwilioListenOnlyWarmTransferCall(
 
                 # Convert TwiML to string
                 twiml = str(response)
-                
+
                 try:
                     # Create the call with embedded TwiML
                     call = client.calls.create(
@@ -223,16 +190,16 @@ class TwilioListenOnlyWarmTransferCall(
                 action_input
             )
             logger.info(f"Websocket server address: {websocket_server_address}")
-            
+
             outbound_websocket_server_address = self.action_config.get_outbound_websocket_server_address(
                 action_input
             )
             logger.info(f"Outbound websocket server address: {outbound_websocket_server_address}")
-            
+
             coach_phone_number = self.action_config.get_coach_phone_number(
                 action_input
             )
-            
+
             if action_input.user_message_tracker is not None:
                 await action_input.user_message_tracker.wait()
 
@@ -248,9 +215,9 @@ class TwilioListenOnlyWarmTransferCall(
                     )
 
             await self.start_stream(
-                twilio_call_sid, 
-                websocket_server_address, 
-                outbound_websocket_server_address, 
+                twilio_call_sid,
+                websocket_server_address,
+                outbound_websocket_server_address,
                 coach_phone_number
             )
 
@@ -258,7 +225,7 @@ class TwilioListenOnlyWarmTransferCall(
                 action_type=action_input.action_config.type,
                 response=ListenOnlyWarmTransferCallResponse(success=True),
             )
-            
+
         except Exception as e:
             logger.error(f"Error in run method: {str(e)}")
             raise
