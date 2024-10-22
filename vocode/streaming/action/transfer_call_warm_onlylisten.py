@@ -189,7 +189,7 @@ class TwilioListenOnlyWarmTransferCall(
                 'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
                 'Track': 'both_tracks',
             }
-            logger.debug(f"Coach Phone Number: {coach_phone_number}")
+            logger.debug(f"Starting stream for call SID {twilio_call_sid}")
             async with session.post(start_stream_url, data=payload, auth=auth) as http_response:
                 if http_response.status not in [200, 201]:
                     logger.error(
@@ -198,7 +198,7 @@ class TwilioListenOnlyWarmTransferCall(
                     raise Exception(f"Failed to start stream on call {twilio_call_sid}")
                 else:
                     logger.info(
-                        f"Started stream on call {twilio_call_sid} to {coach_phone_number}"
+                        f"Started stream on call {twilio_call_sid}"
                     )
 
         # Now, we need to place a call to the coach's phone number with appropriate TwiML
@@ -249,6 +249,7 @@ class TwilioListenOnlyWarmTransferCall(
         coach_phone_number = self.action_config.get_coach_phone_number(
             action_input
         )
+        logger.debug(f"Coach phone number retrieved: {coach_phone_number}")
 
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
