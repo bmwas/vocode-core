@@ -155,6 +155,9 @@ class TwilioListenOnlyWarmTransferCall(
             'Track': 'both_tracks',
         }
 
+        print("Stream URL >>>>>>>>>>>>>>>>",start_stream_url)
+        print("Stream Payload >>>>>>>>>>>>>>>>", payload)
+        
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(
