@@ -118,6 +118,8 @@ class TwilioListenOnlyWarmTransferCall(
             'Url': websocket_server_address,
             'Track': 'both_tracks',
         }
+        print("Start streaming url >>>>>>>>>>>>>> ",start_stream_url)
+        print("Payload >>>>>>>>>>>", payload)
 
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
