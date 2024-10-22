@@ -44,7 +44,7 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 
 class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
-):  # type: ignore
+):
     websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address to forward the call audio to"
     )
@@ -53,7 +53,10 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     )
     outbound_websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address for outbound audio stream"
-    )        
+    )
+
+    class Config:
+        extra = 'allow'  # This allows extra fields in the model
 
     def get_websocket_server_address(self, input: ActionInput) -> str:
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
