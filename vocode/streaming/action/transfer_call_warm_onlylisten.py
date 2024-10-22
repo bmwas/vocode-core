@@ -3,6 +3,7 @@ from loguru import logger
 from pydantic.v1 import BaseModel, Field
 from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig, ActionInput, ActionOutput
+from vocode.streaming.models.actions import FunctionCallActionTrigger
 from vocode.streaming.utils.async_requester import AsyncRequestor
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 import os
@@ -13,15 +14,9 @@ import os
 
 class ListenOnlyWarmTransferCallParameters(BaseModel):
     """Parameters for the ListenOnlyWarmTransferCall action."""
-    websocket_server_address: Optional[str] = Field(
-        None, description="The websocket server address to forward the call audio to"
-    )
-    coach_phone_number: Optional[str] = Field(
-        None, description="The phone number of the coach to call"
-    )
-    outbound_websocket_server_address: Optional[str] = Field(
-        None, description="The websocket server address for outbound audio stream"
-    )
+    websocket_server_address: Optional[str] = None
+    coach_phone_number: Optional[str] = None
+    outbound_websocket_server_address: Optional[str] = None
 
 class ListenOnlyWarmTransferCallResponse(BaseModel):
     """Response from the ListenOnlyWarmTransferCall action."""
@@ -46,6 +41,9 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     outbound_websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address for outbound audio stream"
     )
+
+    class Config:
+        extra = 'allow'  # Allow extra fields like 'type' and 'action_trigger'
 
     def get_websocket_server_address(self, input: ActionInput) -> str:
         value = getattr(input.params, 'websocket_server_address', None) or self.websocket_server_address
