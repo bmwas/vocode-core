@@ -15,7 +15,10 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-
+from twilio.rest import Client
+from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+import sys
+import os
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -118,7 +121,6 @@ class TwilioListenOnlyWarmTransferCall(
             'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
             'Track': 'both_tracks',
         }
-
         print("Twilio Client >>>>>>>>>>>>>> ", twilio_client)
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
@@ -139,6 +141,9 @@ class TwilioListenOnlyWarmTransferCall(
                 response.append(connect)  # Fixed: Append to 'response' instead of 'twiml'
                 # Convert TwiML to string
                 twiml = str(response)
+                ACCOUNT_SID = twilio_client.get_telephony_config().account_sid
+                AUTH_TOKEN = twilio_client.auth[1]
+                client  = Client(ACCOUNT_SID, AUTH_TOKEN)
                 coach_call = twilio_client.calls.create(
                     to=coach_phone_number,
                     twiml=twiml
