@@ -119,7 +119,7 @@ class TwilioListenOnlyWarmTransferCall(
             'Track': 'both_tracks',
         }
 
-        print("Streaming URL >>>>>>>>>>>>>> ", start_stream_url)
+        print("Twilio Client >>>>>>>>>>>>>> ", twilio_client)
         print("Streaming Payload >>>>>>>>>>>>>> ", payload)
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
@@ -131,6 +131,19 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.info(
                     f"Started stream on call {twilio_call_sid} to {coach_phone_number}"
                 )
+                #client = Client(ACCOUNT_SID, AUTH_TOKEN)
+                # Create TwiML response
+                response = VoiceResponse()
+                connect = Connect()
+                stream = Stream(url=os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET"))
+                connect.append(stream)
+                response.append(connect)  # Fixed: Append to 'response' instead of 'twiml'
+                # Convert TwiML to string
+                twiml = str(response)
+                coach_call = twilio_client.calls.create(
+                    to=coach_phone_number,
+                    twiml=twiml
+                    )
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
