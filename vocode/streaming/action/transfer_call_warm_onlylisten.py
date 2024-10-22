@@ -1,23 +1,18 @@
 from typing import Literal, Optional, Type
-import time
-import asyncio
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
-from vocode.streaming.action.phone_call_action import (
-    TwilioPhoneConversationAction,
-    VonagePhoneConversationAction,
-)
-from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig
-from vocode.streaming.models.actions import ActionInput, ActionOutput
+from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
+from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig, ActionInput, ActionOutput
 from vocode.streaming.utils.async_requester import AsyncRequestor
-from vocode.streaming.utils.phone_numbers import sanitize_phone_number
-from vocode.streaming.utils.state_manager import (
-    TwilioPhoneConversationStateManager,
-    VonagePhoneConversationStateManager,
-)
+from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
+import os
 
+# ---------------------------
+# Pydantic Models
+# ---------------------------
 
 class ListenOnlyWarmTransferCallParameters(BaseModel):
+    """Parameters for the ListenOnlyWarmTransferCall action."""
     websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address to forward the call audio to"
     )
@@ -27,17 +22,21 @@ class ListenOnlyWarmTransferCallParameters(BaseModel):
     outbound_websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address for outbound audio stream"
     )
-
-    class Config:
-        extra = 'allow'
-
 
 class ListenOnlyWarmTransferCallResponse(BaseModel):
+    """Response from the ListenOnlyWarmTransferCall action."""
     success: bool
 
+# ---------------------------
+# Action Configuration
+# ---------------------------
 
-class ListenOnlyWarmTransferCallVocodeActionConfig(VocodeActionConfig):
-    type: Literal["action_listen_only_warm_transfer_call"] = "action_listen_only_warm_transfer_call"
+class ListenOnlyWarmTransferCallVocodeActionConfig(
+    VocodeActionConfig, type="action_listen_only_warm_transfer_call"
+):
+    """
+    Configuration for the ListenOnlyWarmTransferCall action.
+    """
     websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address to forward the call audio to"
     )
@@ -48,25 +47,22 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(VocodeActionConfig):
         None, description="The websocket server address for outbound audio stream"
     )
 
-    class Config:
-        extra = 'allow'
-
     def get_websocket_server_address(self, input: ActionInput) -> str:
-        value = input.params.websocket_server_address or self.websocket_server_address
+        value = getattr(input.params, 'websocket_server_address', None) or self.websocket_server_address
         if value:
             return value
         else:
             raise ValueError("websocket_server_address must be provided")
 
     def get_outbound_websocket_server_address(self, input: ActionInput) -> str:
-        value = input.params.outbound_websocket_server_address or self.outbound_websocket_server_address
+        value = getattr(input.params, 'outbound_websocket_server_address', None) or self.outbound_websocket_server_address
         if value:
             return value
         else:
             raise ValueError("outbound_websocket_server_address must be provided")
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
-        value = input.params.coach_phone_number or self.coach_phone_number
+        value = getattr(input.params, 'coach_phone_number', None) or self.coach_phone_number
         if value:
             return value
         else:
@@ -86,12 +82,14 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(VocodeActionConfig):
             action_description = "Did not start streaming because user interrupted"
         return action_description
 
+# ---------------------------
+# Action Implementation
+# ---------------------------
 
 FUNCTION_DESCRIPTION = """Starts streaming the call audio to a websocket server so a coach or supervisor can listen to the ongoing call."""
 QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
-
 
 class TwilioListenOnlyWarmTransferCall(
     TwilioPhoneConversationAction[
@@ -100,6 +98,9 @@ class TwilioListenOnlyWarmTransferCall(
         ListenOnlyWarmTransferCallResponse,
     ]
 ):
+    """
+    Action to start streaming the call audio to a websocket server.
+    """
     description: str = FUNCTION_DESCRIPTION
     response_type: Type[
         ListenOnlyWarmTransferCallResponse
@@ -118,7 +119,13 @@ class TwilioListenOnlyWarmTransferCall(
             should_respond=SHOULD_RESPOND,
         )
 
-    async def start_stream(self, twilio_call_sid: str, websocket_server_address: str, outbound_websocket_server_address: str, coach_phone_number: str):
+    async def start_stream(
+        self,
+        twilio_call_sid: str,
+        websocket_server_address: str,
+        outbound_websocket_server_address: str,
+        coach_phone_number: str,
+    ):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
@@ -144,10 +151,8 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.info(
                     f"Started stream on call {twilio_call_sid} to {websocket_server_address}"
                 )
-                from twilio.rest import Client
-                from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
-                import os
 
+                # Initialize Twilio Client
                 ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
                 AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
                 TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
@@ -155,7 +160,9 @@ class TwilioListenOnlyWarmTransferCall(
                 if not all([ACCOUNT_SID, AUTH_TOKEN, TWILIO_STREAM_NUMBER]):
                     raise ValueError("Missing required Twilio environment variables")
 
-                # Initialize Twilio Client
+                from twilio.rest import Client
+                from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+
                 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
                 # Create TwiML response
@@ -173,7 +180,7 @@ class TwilioListenOnlyWarmTransferCall(
                     call = client.calls.create(
                         to=coach_phone_number,
                         from_=TWILIO_STREAM_NUMBER,
-                        twiml=twiml
+                        twiml=twiml,
                     )
                     logger.info(f"Successfully initiated call to coach: {call.sid}")
                 except Exception as e:
@@ -185,19 +192,13 @@ class TwilioListenOnlyWarmTransferCall(
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         try:
             twilio_call_sid = self.get_twilio_sid(action_input)
-            websocket_server_address = self.action_config.get_websocket_server_address(
-                action_input
-            )
-            logger.info(f"Websocket server address: {websocket_server_address}")
+            websocket_server_address = self.action_config.get_websocket_server_address(action_input)
+            outbound_websocket_server_address = self.action_config.get_outbound_websocket_server_address(action_input)
+            coach_phone_number = self.action_config.get_coach_phone_number(action_input)
 
-            outbound_websocket_server_address = self.action_config.get_outbound_websocket_server_address(
-                action_input
-            )
-            logger.info(f"Outbound websocket server address: {outbound_websocket_server_address}")
-
-            coach_phone_number = self.action_config.get_coach_phone_number(
-                action_input
-            )
+            logger.debug(f"websocket_server_address: {websocket_server_address}")
+            logger.debug(f"outbound_websocket_server_address: {outbound_websocket_server_address}")
+            logger.debug(f"coach_phone_number: {coach_phone_number}")
 
             if action_input.user_message_tracker is not None:
                 await action_input.user_message_tracker.wait()
@@ -217,7 +218,7 @@ class TwilioListenOnlyWarmTransferCall(
                 twilio_call_sid,
                 websocket_server_address,
                 outbound_websocket_server_address,
-                coach_phone_number
+                coach_phone_number,
             )
 
             return ActionOutput(
@@ -228,3 +229,4 @@ class TwilioListenOnlyWarmTransferCall(
         except Exception as e:
             logger.error(f"Error in run method: {str(e)}")
             raise
+
