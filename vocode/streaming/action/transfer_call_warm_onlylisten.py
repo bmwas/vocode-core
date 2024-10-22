@@ -176,7 +176,7 @@ class TwilioListenOnlyWarmTransferCall(
             'Url': websocket_server_address,
             'Track': 'both_tracks',
         }
-
+        print("Websocket Server Address >>>>>>>>>>>>>>>>>> ", websocket_server_address)
         async with session.post(inbound_stream_url, data=inbound_payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(
