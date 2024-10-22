@@ -36,9 +36,8 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
     success: bool
 
 
-class ListenOnlyWarmTransferCallVocodeActionConfig(
-    VocodeActionConfig, type="action_listen_only_warm_transfer_call"
-):  # type: ignore
+class ListenOnlyWarmTransferCallVocodeActionConfig(VocodeActionConfig):
+    type: Literal["action_listen_only_warm_transfer_call"] = "action_listen_only_warm_transfer_call"
     websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address to forward the call audio to"
     )
