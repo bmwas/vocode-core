@@ -116,7 +116,7 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Prepare the payload
         payload = {
-            'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),,
+            'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
             'Track': 'both_tracks',
         }
 
