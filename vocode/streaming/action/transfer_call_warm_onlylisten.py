@@ -134,7 +134,7 @@ class TwilioListenOnlyWarmTransferCall(
             should_respond=SHOULD_RESPOND,
         )
 
-    async def start_stream(self, twilio_call_sid: str, websocket_server_address: str):
+    async def start_stream(self, twilio_call_sid: str, websocket_server_address: str, outbound_websocket_server_address: str, coach_phone_number: str ):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
@@ -160,6 +160,36 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.info(
                     f"Started stream on call {twilio_call_sid} to {websocket_server_address}"
                 )
+                from twilio.rest import Client
+                from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+                import os
+                ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+                AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+
+                # ----------------------------
+                # Main Execution
+                # ----------------------------
+
+                # Initialize Twilio Client
+                client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+                # WebSocket URL to stream audio
+
+                # Create TwiML response
+                response = VoiceResponse()
+                connect = Connect()
+                stream = Stream(url=outbound_websocket_server_address)
+                connect.append(stream)
+                response.append(connect)  # Fixed: Append to 'response' instead of 'twiml'
+
+                # Convert TwiML to string
+                twiml = str(response)
+                # Create the call with embedded TwiML
+                call = client.calls.create(
+                    to=coach_phone_number,
+                    from_=os.environ.get("TWILIO_STREAM_NUMBER"),
+                    twiml=twiml
+                )
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
@@ -168,7 +198,12 @@ class TwilioListenOnlyWarmTransferCall(
         websocket_server_address = self.action_config.get_websocket_server_address(
             action_input
         )
-
+        outbound_websocket_server_address = self.action_config.get_outbound_websocket_server_address(
+            action_input
+        )
+        coach_phone_number = self.action_config.get_coach_phone_number( 
+            action_input
+        )
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
 
@@ -183,7 +218,7 @@ class TwilioListenOnlyWarmTransferCall(
                     response=ListenOnlyWarmTransferCallResponse(success=False),
                 )
 
-        await self.start_stream(twilio_call_sid, websocket_server_address)
+        await self.start_stream(twilio_call_sid, websocket_server_address, outbound_websocket_server_address, coach_phone_number)
 
         return ActionOutput(
             action_type=action_input.action_config.type,
