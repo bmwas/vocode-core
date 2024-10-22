@@ -42,7 +42,8 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  
     coach_phone_number: Optional[str] = Field(None, description="The phone number of the coach to forward streaming to")
-
+    print("Print Input>>>>>>>>>>>>>>>>>>>>>>>>>>> ",input.params)
+    await async(5)
     def get_coach_phone_number(self, input: ActionInput) -> str:
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
             return input.params.coach_phone_number
