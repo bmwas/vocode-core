@@ -1,6 +1,6 @@
 from typing import Literal, Optional, Type
 from loguru import logger
-from pydantic.v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from vocode.streaming.action.phone_call_action import TwilioPhoneConversationAction
 from vocode.streaming.models.actions import ActionConfig as VocodeActionConfig, ActionInput, ActionOutput
 from vocode.streaming.models.actions import FunctionCallActionTrigger
@@ -26,12 +26,13 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 # Action Configuration
 # ---------------------------
 
-class ListenOnlyWarmTransferCallVocodeActionConfig(
-    VocodeActionConfig, type="action_listen_only_warm_transfer_call"
-):
+class ListenOnlyWarmTransferCallVocodeActionConfig(VocodeActionConfig):
     """
     Configuration for the ListenOnlyWarmTransferCall action.
     """
+    action_type: Literal["action_listen_only_warm_transfer_call"] = Field(
+        "action_listen_only_warm_transfer_call", alias='type'
+    )
     websocket_server_address: Optional[str] = Field(
         None, description="The websocket server address to forward the call audio to"
     )
@@ -43,10 +44,18 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     )
 
     class Config:
-        extra = 'allow'  # Allow extra fields like 'type' and 'action_trigger'
+        extra = 'allow'
+        allow_population_by_field_name = True
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        logger.debug(f"Action Config Initialized with outbound_websocket_server_address: {self.outbound_websocket_server_address}")
+        logger.debug(f"Action Config Initialized with websocket_server_address: {self.websocket_server_address}")
+        logger.debug(f"Action Config Initialized with coach_phone_number: {self.coach_phone_number}")
 
     def get_websocket_server_address(self, input: ActionInput) -> str:
         value = getattr(input.params, 'websocket_server_address', None) or self.websocket_server_address
+        logger.debug(f"Retrieved websocket_server_address: {value}")
         if value:
             return value
         else:
@@ -54,6 +63,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 
     def get_outbound_websocket_server_address(self, input: ActionInput) -> str:
         value = getattr(input.params, 'outbound_websocket_server_address', None) or self.outbound_websocket_server_address
+        logger.debug(f"Retrieved outbound_websocket_server_address: {value}")
         if value:
             return value
         else:
@@ -61,6 +71,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
         value = getattr(input.params, 'coach_phone_number', None) or self.coach_phone_number
+        logger.debug(f"Retrieved coach_phone_number: {value}")
         if value:
             return value
         else:
@@ -208,7 +219,7 @@ class TwilioListenOnlyWarmTransferCall(
                 if self.conversation_state_manager.transcript.was_last_message_interrupted():
                     logger.info("Last bot message was interrupted, not starting stream")
                     return ActionOutput(
-                        action_type=action_input.action_config.type,
+                        action_type=self.action_config.action_type,
                         response=ListenOnlyWarmTransferCallResponse(success=False),
                     )
 
@@ -220,11 +231,12 @@ class TwilioListenOnlyWarmTransferCall(
             )
 
             return ActionOutput(
-                action_type=action_input.action_config.type,
+                action_type=self.action_config.action_type,
                 response=ListenOnlyWarmTransferCallResponse(success=True),
             )
 
         except Exception as e:
             logger.error(f"Error in run method: {str(e)}")
             raise
+
 
