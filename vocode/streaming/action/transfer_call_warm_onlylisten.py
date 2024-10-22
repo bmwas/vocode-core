@@ -176,6 +176,7 @@ class TwilioListenOnlyWarmTransferCall(
         Raises:
             Exception: If starting the stream fails.
         """
+        logger.debug(f"[START_STREAM METHOD] Starting stream with coach_phone_number: {coach_phone_number}")
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
@@ -189,7 +190,7 @@ class TwilioListenOnlyWarmTransferCall(
                 'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
                 'Track': 'both_tracks',
             }
-            logger.debug(f"Starting stream for call SID {twilio_call_sid}")
+            logger.debug(f"[START_STREAM METHOD] Starting stream for call SID {twilio_call_sid}")
             async with session.post(start_stream_url, data=payload, auth=auth) as http_response:
                 if http_response.status not in [200, 201]:
                     logger.error(
@@ -221,6 +222,7 @@ class TwilioListenOnlyWarmTransferCall(
         twiml = str(voice_response)
 
         def make_call():
+            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number}")
             client = Client(ACCOUNT_SID, AUTH_TOKEN)
             coach_call = client.calls.create(
                 to=coach_phone_number,
@@ -249,7 +251,7 @@ class TwilioListenOnlyWarmTransferCall(
         coach_phone_number = self.action_config.get_coach_phone_number(
             action_input
         )
-        logger.debug(f"Coach phone number retrieved: {coach_phone_number}")
+        logger.debug(f"[RUN METHOD] Coach phone number retrieved: {coach_phone_number}")
 
         if action_input.user_message_tracker is not None:
             await action_input.user_message_tracker.wait()
