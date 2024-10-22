@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Type, Union
+from typing import Literal, Type
 import asyncio
 from loguru import logger
 from pydantic.v1 import BaseModel, Field
@@ -11,11 +11,7 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
 
 
-class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
-    pass
-
-
-class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
+class ListenOnlyWarmTransferCallParameters(BaseModel):
     inbound_websocket_server_address: str = Field(
         ..., description="The inbound websocket server address to forward the call audio to"
     )
@@ -25,11 +21,6 @@ class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
     outbound_websocket_server_address: str = Field(
         ..., description="The outbound websocket server address for the coach's call"
     )
-
-
-ListenOnlyWarmTransferCallParameters = Union[
-    ListenOnlyWarmTransferCallEmptyParameters, ListenOnlyWarmTransferCallRequiredParameters
-]
 
 
 class ListenOnlyWarmTransferCallResponse(BaseModel):
@@ -50,35 +41,28 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     )
 
     def get_inbound_websocket_server_address(self, input: ActionInput) -> str:
-        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
+        if input.params and input.params.inbound_websocket_server_address:
             return input.params.inbound_websocket_server_address
-        elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
-            assert (
-                self.inbound_websocket_server_address
-            ), "inbound_websocket_server_address must be provided"
+        elif self.inbound_websocket_server_address:
             return self.inbound_websocket_server_address
         else:
-            raise TypeError("Invalid input params type")
+            raise ValueError("inbound_websocket_server_address must be provided")
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
-        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
+        if input.params and input.params.coach_phone_number:
             return input.params.coach_phone_number
-        elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
-            assert self.coach_phone_number, "coach_phone_number must be provided"
+        elif self.coach_phone_number:
             return self.coach_phone_number
         else:
-            raise TypeError("Invalid input params type")
+            raise ValueError("coach_phone_number must be provided")
 
     def get_outbound_websocket_server_address(self, input: ActionInput) -> str:
-        if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
+        if input.params and input.params.outbound_websocket_server_address:
             return input.params.outbound_websocket_server_address
-        elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
-            assert (
-                self.outbound_websocket_server_address
-            ), "outbound_websocket_server_address must be provided"
+        elif self.outbound_websocket_server_address:
             return self.outbound_websocket_server_address
         else:
-            raise TypeError("Invalid input params type")
+            raise ValueError("outbound_websocket_server_address must be provided")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
         inbound_websocket_server_address = self.get_inbound_websocket_server_address(input)
@@ -116,14 +100,7 @@ class TwilioListenOnlyWarmTransferCall(
 
     @property
     def parameters_type(self) -> Type[ListenOnlyWarmTransferCallParameters]:
-        if (
-            self.action_config.inbound_websocket_server_address
-            and self.action_config.coach_phone_number
-            and self.action_config.outbound_websocket_server_address
-        ):
-            return ListenOnlyWarmTransferCallEmptyParameters
-        else:
-            return ListenOnlyWarmTransferCallRequiredParameters
+        return ListenOnlyWarmTransferCallParameters
 
     def __init__(self, action_config: ListenOnlyWarmTransferCallVocodeActionConfig):
         super().__init__(
@@ -133,9 +110,7 @@ class TwilioListenOnlyWarmTransferCall(
             should_respond=SHOULD_RESPOND,
         )
 
-    async def start_inbound_stream(
-        self, twilio_call_sid: str, inbound_websocket_server_address: str
-    ):
+    async def start_inbound_stream(self, twilio_call_sid: str, inbound_websocket_server_address: str):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
@@ -156,17 +131,13 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.error(
                     f"Failed to start inbound stream on call {twilio_call_sid}: {response.status} {response.reason}"
                 )
-                raise Exception(
-                    f"Failed to start inbound stream on call {twilio_call_sid}"
-                )
+                raise Exception(f"Failed to start inbound stream on call {twilio_call_sid}")
             else:
                 logger.info(
                     f"Started inbound stream on call {twilio_call_sid} to {inbound_websocket_server_address}"
                 )
 
-    async def call_coach(
-        self, coach_phone_number: str, outbound_websocket_server_address: str
-    ):
+    async def call_coach(self, coach_phone_number: str, outbound_websocket_server_address: str):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth_token = twilio_client.get_telephony_config().auth_token
@@ -223,9 +194,7 @@ class TwilioListenOnlyWarmTransferCall(
                 )
 
         # Start streaming to the inbound websocket
-        await self.start_inbound_stream(
-            twilio_call_sid, inbound_websocket_server_address
-        )
+        await self.start_inbound_stream(twilio_call_sid, inbound_websocket_server_address)
 
         # Call the coach and stream to their phone using the outbound websocket
         await self.call_coach(coach_phone_number, outbound_websocket_server_address)
