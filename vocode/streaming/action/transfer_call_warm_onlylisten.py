@@ -71,10 +71,13 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
             AssertionError: If the coach's phone number is not set in the configuration when parameters are empty.
         """
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
-            print("Passed Coach Phone # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",input.params.coach_phone_number)
+            logger.debug("Using coach_phone_number from input parameters.")
+            logger.debug(f"Passed Coach Phone #: {input.params.coach_phone_number}")
             return input.params.coach_phone_number
         elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
+            logger.debug("Using coach_phone_number from action configuration.")
             assert self.coach_phone_number, "coach_phone_number must be set"
+            logger.debug(f"Configured Coach Phone #: {self.coach_phone_number}")
             return self.coach_phone_number
         else:
             raise TypeError("Invalid input params type")
@@ -165,6 +168,7 @@ class TwilioListenOnlyWarmTransferCall(
             is_interruptible=IS_INTERRUPTIBLE,
             should_respond=SHOULD_RESPOND,
         )
+        logger.debug("TwilioListenOnlyWarmTransferCall action initialized with configuration.")
 
     async def start_stream(self, twilio_call_sid: str, coach_phone_number: str):
         """
@@ -191,11 +195,12 @@ class TwilioListenOnlyWarmTransferCall(
                 'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
                 'Track': 'both_tracks',
             }
-            logger.debug(f"[START_STREAM METHOD] Starting stream for call SID {twilio_call_sid}")
+            logger.debug(f"[START_STREAM METHOD] Starting stream for call SID {twilio_call_sid} with payload: {payload}")
             async with session.post(start_stream_url, data=payload, auth=auth) as http_response:
                 if http_response.status not in [200, 201]:
+                    error_body = await http_response.text()
                     logger.error(
-                        f"Failed to start stream on call {twilio_call_sid}: {http_response.status} {http_response.reason}"
+                        f"Failed to start stream on call {twilio_call_sid}: {http_response.status} {http_response.reason} - {error_body}"
                     )
                     raise Exception(f"Failed to start stream on call {twilio_call_sid}")
                 else:
@@ -203,12 +208,16 @@ class TwilioListenOnlyWarmTransferCall(
                         f"Started stream on call {twilio_call_sid}"
                     )
 
-        # Now, we need to place a call to the coach's phone number with appropriate TwiML
-        # Since the Twilio client is synchronous, we need to run it in an executor
+        # Now, place a call to the coach's phone number with appropriate TwiML
+        # Since the Twilio client is synchronous, run it in an executor
         ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
         AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
         TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
         OUTBOUND_AUDIO_STREAM_WEBSOCKET = os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET")
+
+        # Log environment variables for debugging
+        logger.debug(f"Twilio Credentials - ACCOUNT_SID: {ACCOUNT_SID}, TWILIO_STREAM_NUMBER: {TWILIO_STREAM_NUMBER}")
+        logger.debug(f"Stream URLs - INBOUND: {os.environ.get('APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET')}, OUTBOUND: {OUTBOUND_AUDIO_STREAM_WEBSOCKET}")
 
         if not all([ACCOUNT_SID, AUTH_TOKEN, TWILIO_STREAM_NUMBER, OUTBOUND_AUDIO_STREAM_WEBSOCKET]):
             logger.error("Missing required environment variables for Twilio configuration.")
@@ -221,20 +230,21 @@ class TwilioListenOnlyWarmTransferCall(
         connect.append(stream)
         voice_response.append(connect)
         twiml = str(voice_response)
+        logger.debug(f"Generated TwiML for coach call: {twiml}")
 
-        def make_call():
-            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number}")
+        def make_call(coach_phone_number_inner: str):
+            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number_inner}")
             client = Client(ACCOUNT_SID, AUTH_TOKEN)
             coach_call = client.calls.create(
-                to=coach_phone_number,
+                to=coach_phone_number_inner,
                 from_=TWILIO_STREAM_NUMBER,
                 twiml=twiml
             )
-            logger.info(f"Placed call to coach at {coach_phone_number} with Call SID: {coach_call.sid}")
+            logger.info(f"Placed call to coach at {coach_phone_number_inner} with Call SID: {coach_call.sid}")
             return coach_call
 
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, make_call)
+        await loop.run_in_executor(None, make_call, coach_phone_number)
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
@@ -249,9 +259,7 @@ class TwilioListenOnlyWarmTransferCall(
             ActionOutput[ListenOnlyWarmTransferCallResponse]: The result of the action.
         """
         twilio_call_sid = self.get_twilio_sid(action_input)
-        coach_phone_number = self.action_config.get_coach_phone_number(
-            action_input
-        )
+        coach_phone_number = self.action_config.get_coach_phone_number(action_input)
         logger.debug(f"[RUN METHOD] Coach phone number retrieved: {coach_phone_number}")
 
         if action_input.user_message_tracker is not None:
