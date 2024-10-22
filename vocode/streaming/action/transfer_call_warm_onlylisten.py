@@ -26,9 +26,7 @@ class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
 
 
 class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
-    coach_phone_number: str = Field(
-        ..., description="The websocket server address to forward the call audio to"
-    )
+    coach_phone_number: str = Field(..., description="The phone number of the coach to forward streaming to")
 
 
 ListenOnlyWarmTransferCallParameters = Union[
@@ -42,10 +40,8 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 
 class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
-):  # type: ignore
-    coach_phone_number: str = Field(
-        ..., description="The phone number of the coach to listen"
-    )
+):  
+    coach_phone_number: str = Field(..., description="The phone number of the coach to forward streaming to")
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
