@@ -181,7 +181,6 @@ class TwilioListenOnlyWarmTransferCall(
                 stream = Stream(url=outbound_websocket_server_address)
                 connect.append(stream)
                 response.append(connect)  # Fixed: Append to 'response' instead of 'twiml'
-
                 # Convert TwiML to string
                 twiml = str(response)
                 # Create the call with embedded TwiML
