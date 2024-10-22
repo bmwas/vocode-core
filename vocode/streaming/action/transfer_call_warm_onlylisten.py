@@ -19,6 +19,7 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
 import sys
 import os
+import asyncio
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -132,6 +133,7 @@ class TwilioListenOnlyWarmTransferCall(
                 logger.info(
                     f"Started stream on call {twilio_call_sid} to {coach_phone_number}"
                 )
+                await asyncio.sleep(3)
                 #client = Client(ACCOUNT_SID, AUTH_TOKEN)
                 # Create TwiML response
                 response = VoiceResponse()
@@ -146,6 +148,7 @@ class TwilioListenOnlyWarmTransferCall(
                 client  = Client(ACCOUNT_SID, AUTH_TOKEN)
                 coach_call = client.calls.create(
                     to=coach_phone_number,
+                    from_=os.environ.get("TWILIO_STREAM_NUMBER"),
                     twiml=twiml
                     )
 
