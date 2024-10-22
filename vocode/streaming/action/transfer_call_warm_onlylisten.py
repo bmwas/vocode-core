@@ -120,7 +120,6 @@ class TwilioListenOnlyWarmTransferCall(
         }
 
         print("Twilio Client >>>>>>>>>>>>>> ", twilio_client)
-        print("Streaming Payload >>>>>>>>>>>>>> ", payload)
         async with session.post(start_stream_url, data=payload, auth=auth) as response:
             if response.status not in [200, 201]:
                 logger.error(
