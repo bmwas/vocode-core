@@ -9,7 +9,7 @@ from vocode.streaming.utils.async_requester import AsyncRequestor
 from vocode.streaming.utils.state_manager import TwilioPhoneConversationStateManager
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
-
+import os
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -188,7 +188,7 @@ class TwilioListenOnlyWarmTransferCall(
             # Create the call with embedded TwiML
             call = client.calls.create(
                 to=coach_phone_number,
-                from_=twilio_number,
+                from_=os.environ.get("TWILIO_STREAM_NUMBER"),
                 twiml=twiml
             )
             logger.info(f"Coach call initiated successfully. SID: {call.sid}")
