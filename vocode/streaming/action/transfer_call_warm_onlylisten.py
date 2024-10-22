@@ -45,7 +45,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 
     def get_websocket_server_address(self, input: ActionInput) -> str:
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
-            print("Websocket Server >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", input.params.websocket_server_address)
+            print("Pased address value >>>>>>>>>>>>>>>>>>>>",input.params.websocket_server_address)
             return input.params.websocket_server_address
         elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
             assert (
