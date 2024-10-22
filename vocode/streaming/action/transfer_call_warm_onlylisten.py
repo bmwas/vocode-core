@@ -22,8 +22,8 @@ class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
 
 
 class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
-    coach: str = Field(
-        ..., description=" coach phone"
+    websocket_server_address: str = Field(
+        ..., description="The websocket server address to forward the call audio to"
     )
 
 
@@ -39,25 +39,25 @@ class ListenOnlyWarmTransferCallResponse(BaseModel):
 class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  # type: ignore
-    coach: Optional[str] = Field(
-        None, description="coach phone"
+    websocket_server_address: Optional[str] = Field(
+        None, description="The websocket server address to forward the call audio to"
     )
 
-    def get_coach(self, input: ActionInput) -> str:
+    def get_websocket_server_address(self, input: ActionInput) -> str:
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
-            print("Coach Phone # is  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",input.params.coach)
-            return input.params.coach
+            print("Websocket Server >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", input.params.websocket_server_address)
+            return input.params.websocket_server_address
         elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
             assert (
-                self.coach
-            ), "coach phone must be set"
-            return self.coach
+                self.websocket_server_address
+            ), "websocket_server_address must be set"
+            return self.websocket_server_address
         else:
             raise TypeError("Invalid input params type")
 
     def action_attempt_to_string(self, input: ActionInput) -> str:
-        coach = self.get_coach(input)
-        return f"Attempting to start streaming call audio to {coach}"
+        websocket_server_address = self.get_websocket_server_address(input)
+        return f"Attempting to start streaming call audio to {websocket_server_address}"
 
     def action_result_to_string(
         self, input: ActionInput, output: ActionOutput
@@ -70,7 +70,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
         return action_description
 
 
-FUNCTION_DESCRIPTION = """Starts streaming the call for coach or supervisor to listen to the ongoing call."""
+FUNCTION_DESCRIPTION = """Starts streaming the call audio to a websocket server so a coach or supervisor can listen to the ongoing call."""
 QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
@@ -91,7 +91,7 @@ class TwilioListenOnlyWarmTransferCall(
 
     @property
     def parameters_type(self) -> Type[ListenOnlyWarmTransferCallParameters]:
-        if self.action_config.coach:
+        if self.action_config.websocket_server_address:
             return ListenOnlyWarmTransferCallEmptyParameters
         else:
             return ListenOnlyWarmTransferCallRequiredParameters
@@ -104,7 +104,7 @@ class TwilioListenOnlyWarmTransferCall(
             should_respond=SHOULD_RESPOND,
         )
 
-    async def start_stream(self, twilio_call_sid: str, coach: str):
+    async def start_stream(self, twilio_call_sid: str, websocket_server_address: str):
         twilio_client = self.conversation_state_manager.create_twilio_client()
         account_sid = twilio_client.get_telephony_config().account_sid
         auth = twilio_client.auth  # Should be a tuple (username, auth_token)
@@ -116,7 +116,7 @@ class TwilioListenOnlyWarmTransferCall(
 
         # Prepare the payload
         payload = {
-            'Url': os.environ.get("APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET"),
+            'Url': websocket_server_address,
             'Track': 'both_tracks',
         }
 
@@ -128,14 +128,14 @@ class TwilioListenOnlyWarmTransferCall(
                 raise Exception(f"Failed to start stream on call {twilio_call_sid}")
             else:
                 logger.info(
-                    f"Started stream on call {twilio_call_sid} to {coach}"
+                    f"Started stream on call {twilio_call_sid} to {websocket_server_address}"
                 )
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
         twilio_call_sid = self.get_twilio_sid(action_input)
-        coach = self.action_config.get_coach(
+        websocket_server_address = self.action_config.get_websocket_server_address(
             action_input
         )
 
@@ -153,7 +153,7 @@ class TwilioListenOnlyWarmTransferCall(
                     response=ListenOnlyWarmTransferCallResponse(success=False),
                 )
 
-        await self.start_stream(twilio_call_sid, coach)
+        await self.start_stream(twilio_call_sid, websocket_server_address)
 
         return ActionOutput(
             action_type=action_input.action_config.type,
