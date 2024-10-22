@@ -73,7 +73,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
         if isinstance(input.params, ListenOnlyWarmTransferCallRequiredParameters):
             logger.debug("Using coach_phone_number from input parameters.")
             logger.debug(f"Passed Coach Phone #: {input.params.coach_phone_number}")
-            print("Passed phone # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" input.params.coach_phone_number)
+            print("Passed phone # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", input.params.coach_phone_number)
             return input.params.coach_phone_number
         elif isinstance(input.params, ListenOnlyWarmTransferCallEmptyParameters):
             logger.debug("Using coach_phone_number from action configuration.")
