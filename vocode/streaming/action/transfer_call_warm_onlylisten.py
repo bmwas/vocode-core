@@ -15,7 +15,7 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
-
+import os
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
     pass
@@ -23,7 +23,7 @@ class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
 
 class ListenOnlyWarmTransferCallRequiredParameters(BaseModel):
     coach_phone_number: str = Field(
-        ..., description="The websocket server address to forward the call audio to"
+        ..., description="The phone number to forward the call audio to"
     )
 
 
@@ -40,7 +40,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
     VocodeActionConfig, type="action_listen_only_warm_transfer_call"
 ):  # type: ignore
     coach_phone_number: Optional[str] = Field(
-        None, description="The websocket server address to forward the call audio to"
+        None, description="The phone number to forward the call audio to"
     )
 
     def get_coach_phone_number(self, input: ActionInput) -> str:
