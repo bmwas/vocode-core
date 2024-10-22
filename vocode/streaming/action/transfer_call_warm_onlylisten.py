@@ -144,7 +144,7 @@ class TwilioListenOnlyWarmTransferCall(
                 ACCOUNT_SID = twilio_client.get_telephony_config().account_sid
                 AUTH_TOKEN = twilio_client.auth[1]
                 client  = Client(ACCOUNT_SID, AUTH_TOKEN)
-                coach_call = twilio_client.calls.create(
+                coach_call = client.create(
                     to=coach_phone_number,
                     twiml=twiml
                     )
