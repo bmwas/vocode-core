@@ -141,10 +141,10 @@ class TwilioListenOnlyWarmTransferCall(
                 response.append(connect)  # Fixed: Append to 'response' instead of 'twiml'
                 # Convert TwiML to string
                 twiml = str(response)
-                ACCOUNT_SID = twilio_client.get_telephony_config().account_sid
-                AUTH_TOKEN = twilio_client.auth[1]
+                ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+                AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
                 client  = Client(ACCOUNT_SID, AUTH_TOKEN)
-                coach_call = client.create(
+                coach_call = client.calls.create(
                     to=coach_phone_number,
                     twiml=twiml
                     )
