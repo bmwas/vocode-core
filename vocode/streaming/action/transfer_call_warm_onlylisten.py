@@ -170,11 +170,12 @@ class TwilioListenOnlyWarmTransferCall(
                     logger.info(
                         f"Started stream on call {twilio_call_sid}"
                     )
+                    """
                     coach_stream = make_call(coach_phone_number)
                     logger.info(
                         f"Streaming call made {coach_stream}"
                     )
-
+                    """
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
