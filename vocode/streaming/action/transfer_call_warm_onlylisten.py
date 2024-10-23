@@ -15,6 +15,9 @@ from vocode.streaming.utils.state_manager import (
     TwilioPhoneConversationStateManager,
     VonagePhoneConversationStateManager,
 )
+from twilio.rest import Client
+from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
+import sys
 import os
 
 class ListenOnlyWarmTransferCallEmptyParameters(BaseModel):
@@ -166,15 +169,15 @@ class TwilioListenOnlyWarmTransferCall(
         twiml = str(voice_response)
         logger.debug(f"Generated TwiML for coach call: {twiml}")
 
-        def make_call(coach_phone_number_inner: str):
-            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number_inner}")
+        def make_call(coach_phone_number: str):
+            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number}")
             client = Client(ACCOUNT_SID, AUTH_TOKEN)
             coach_call = client.calls.create(
-                to=coach_phone_number_inner,
+                to=coach_phone_number,
                 from_=TWILIO_STREAM_NUMBER,
                 twiml=twiml
             )
-            logger.info(f"Placed call to coach at {coach_phone_number_inner} with Call SID: {coach_call.sid}")
+            logger.info(f"Placed call to coach at {coach_phone_number} with Call SID: {coach_call.sid}")
             return coach_call
 
     async def run(
