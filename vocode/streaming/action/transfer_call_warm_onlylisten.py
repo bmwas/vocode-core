@@ -78,6 +78,32 @@ QUIET = False
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
+# Make a streaming call. 
+def make_call(coach_phone_number: str):
+    # Now, place a call to the coach's phone number with appropriate TwiML
+    # Since the Twilio client is synchronous, run it in an executor
+    ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+    AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+    TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
+    OUTBOUND_AUDIO_STREAM_WEBSOCKET = os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET")
+    # Create the TwiML response
+    voice_response = VoiceResponse()
+    connect = Connect()
+    stream = Stream(url=OUTBOUND_AUDIO_STREAM_WEBSOCKET)
+    connect.append(stream)
+    voice_response.append(connect)
+    twiml = str(voice_response)
+    logger.debug(f"Generated TwiML for coach call: {twiml}")
+    logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number}")
+    client = Client(ACCOUNT_SID, AUTH_TOKEN)
+    coach_call = client.calls.create(
+        to=coach_phone_number,
+        from_=TWILIO_STREAM_NUMBER,
+        twiml=twiml
+    )
+    logger.info(f"Placed call to coach at {coach_phone_number} with Call SID: {coach_call.sid}")
+    return coach_call
+
 
 class TwilioListenOnlyWarmTransferCall(
     TwilioPhoneConversationAction[
@@ -144,41 +170,10 @@ class TwilioListenOnlyWarmTransferCall(
                     logger.info(
                         f"Started stream on call {twilio_call_sid}"
                     )
-
-        # Now, place a call to the coach's phone number with appropriate TwiML
-        # Since the Twilio client is synchronous, run it in an executor
-        ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
-        AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
-        TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
-        OUTBOUND_AUDIO_STREAM_WEBSOCKET = os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET")
-
-        # Log environment variables for debugging
-        logger.debug(f"Twilio Credentials - ACCOUNT_SID: {ACCOUNT_SID}, TWILIO_STREAM_NUMBER: {TWILIO_STREAM_NUMBER}")
-        logger.debug(f"Stream URLs - INBOUND: {os.environ.get('APPLICATION_INBOUND_AUDIO_STREAM_WEBSOCKET')}, OUTBOUND: {OUTBOUND_AUDIO_STREAM_WEBSOCKET}")
-
-        if not all([ACCOUNT_SID, AUTH_TOKEN, TWILIO_STREAM_NUMBER, OUTBOUND_AUDIO_STREAM_WEBSOCKET]):
-            logger.error("Missing required environment variables for Twilio configuration.")
-            raise Exception("Missing required environment variables for Twilio configuration.")
-
-        # Create the TwiML response
-        voice_response = VoiceResponse()
-        connect = Connect()
-        stream = Stream(url=OUTBOUND_AUDIO_STREAM_WEBSOCKET)
-        connect.append(stream)
-        voice_response.append(connect)
-        twiml = str(voice_response)
-        logger.debug(f"Generated TwiML for coach call: {twiml}")
-
-        def make_call(coach_phone_number: str):
-            logger.debug(f"[MAKE_CALL FUNCTION] Making call to coach_phone_number: {coach_phone_number}")
-            client = Client(ACCOUNT_SID, AUTH_TOKEN)
-            coach_call = client.calls.create(
-                to=coach_phone_number,
-                from_=TWILIO_STREAM_NUMBER,
-                twiml=twiml
-            )
-            logger.info(f"Placed call to coach at {coach_phone_number} with Call SID: {coach_call.sid}")
-            return coach_call
+                    coach_stream = make_call(coach_phone_number)
+                    logger.info(
+                        f"Streaming call made {coach_stream}"
+                    )
 
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
