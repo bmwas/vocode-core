@@ -170,12 +170,13 @@ class TwilioListenOnlyWarmTransferCall(
                     logger.info(
                         f"Started stream on call {twilio_call_sid}"
                     )
-                    """
-                    coach_stream = make_call(coach_phone_number)
-                    logger.info(
-                        f"Streaming call made {coach_stream}"
-                    )
-                    """
+                    logger.info(f"[ATTEMPTING CALL TO COACH] Making call to coach_phone_number: {coach_phone_number}")
+                    try:
+                        coach_stream = make_call(coach_phone_number)
+                        logger.info(f"[CALL MADE] Call made to: {coach_phone_number}")
+                    except:
+                        logger.info(f"Unable to to make call to {coach_phone_number}")
+                    
     async def run(
         self, action_input: ActionInput[ListenOnlyWarmTransferCallParameters]
     ) -> ActionOutput[ListenOnlyWarmTransferCallResponse]:
