@@ -61,6 +61,7 @@ class PlayHtSynthesizer(BaseSynthesizer[PlayHtSynthesizerConfig]):
             "voice": self.synthesizer_config.voice_id,
             "text": message.text,
             "sample_rate": self.synthesizer_config.sampling_rate,
+            "voice_engine": "Play3.0",  # Specify the voice engine here
             "output_format": output_format,
         }
         if self.synthesizer_config.speed:
