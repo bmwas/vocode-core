@@ -76,7 +76,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 FUNCTION_DESCRIPTION = """Starts streaming the call audio to a websocket server so a coach or supervisor can listen to the ongoing call."""
 QUIET = True
 IS_INTERRUPTIBLE = False
-SHOULD_RESPOND: Literal["always"] = "always"
+SHOULD_RESPOND: Literal["never"] = "never"
 
 # Make a streaming call. 
 def make_call(coach_phone_number: str):
@@ -88,6 +88,9 @@ def make_call(coach_phone_number: str):
     OUTBOUND_AUDIO_STREAM_WEBSOCKET = os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET")
     # Create the TwiML response
     voice_response = VoiceResponse()
+    voice_response.say("Hello, this is an automated call. Please stay on the line for an ongoing call streaming.")
+    # Add a pause to give a brief moment after the message
+    voice_response.pause(length=1)    
     connect = Connect()
     stream = Stream(url=OUTBOUND_AUDIO_STREAM_WEBSOCKET)
     connect.append(stream)
