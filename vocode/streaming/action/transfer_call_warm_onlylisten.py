@@ -84,7 +84,7 @@ def make_call(coach_phone_number: str):
     # Since the Twilio client is synchronous, run it in an executor
     ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
     AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
-    TWILIO_STREAM_NUMBER = os.environ.get("TWILIO_STREAM_NUMBER")
+    TWILIO_STREAM_NUMBER = os.environ.get("OUTBOUND_CALLER_NUMBER")
     OUTBOUND_AUDIO_STREAM_WEBSOCKET = os.environ.get("APPLICATION_OUTBOUND_AUDIO_STREAM_WEBSOCKET")
     # Create the TwiML response
     voice_response = VoiceResponse()
