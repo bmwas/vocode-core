@@ -74,7 +74,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 
 
 FUNCTION_DESCRIPTION = """Starts streaming the call audio to a websocket server so a coach or supervisor can listen to the ongoing call."""
-QUIET = False
+QUIET = True
 IS_INTERRUPTIBLE = False
 SHOULD_RESPOND: Literal["always"] = "always"
 
