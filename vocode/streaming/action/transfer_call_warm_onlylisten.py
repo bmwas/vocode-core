@@ -76,7 +76,7 @@ class ListenOnlyWarmTransferCallVocodeActionConfig(
 FUNCTION_DESCRIPTION = """Starts streaming the call audio to a websocket server so a coach or supervisor can listen to the ongoing call."""
 QUIET = True
 IS_INTERRUPTIBLE = False
-SHOULD_RESPOND: Literal["never"] = "never"
+SHOULD_RESPOND: Literal["always"] = "always"
 
 # Make a streaming call. 
 def make_call(coach_phone_number: str):
